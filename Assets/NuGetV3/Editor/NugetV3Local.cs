@@ -1,5 +1,4 @@
-﻿using Assets.NuGetV3.Editor.Data.Interface;
-using NU.Core;
+﻿using NU.Core;
 using NU.Core.Models.Response;
 using NuGet.Versioning;
 using System;
@@ -228,7 +227,6 @@ internal class NugetV3Local
 
     #endregion
 
-
     #region Requests
 
     private SemaphoreSlim threadOperationLocker = new SemaphoreSlim(1);
@@ -374,10 +372,13 @@ internal class NugetV3Local
             onFinished();
     }
 
+    private async void PackageRegistrationRequestAsync(PackageInstallProcessData package, Action onFinished, CancellationToken cancellationToken)
+        => await PackageRegistrationRequest(package.Package, onFinished, cancellationToken);
+
     private async void PackageRegistrationRequestAsync(RepositoryPackageViewModel package, Action onFinished, CancellationToken cancellationToken)
         => await PackageRegistrationRequest(package, onFinished, cancellationToken);
 
-    private async Task PackageRegistrationRequest(IRegistrableEntry package, Action onFinished, CancellationToken cancellationToken)
+    private async Task PackageRegistrationRequest(RepositoryPackageViewModel package, Action onFinished, CancellationToken cancellationToken)
     {
         try { await threadOperationLocker.WaitAsync(cancellationToken); } catch { return; }
 
@@ -631,7 +632,7 @@ internal class NugetV3Local
             BuildDir = GetNewPackageTempDir()
         };
 
-        if (await InstallPackage(process) && await ResolveDepedencyList(process))
+        if (await LoadPackage(process) && await ResolveDepedencyList(process))
         {
             try
             {
@@ -671,7 +672,7 @@ internal class NugetV3Local
     }
 
 
-    private async Task<bool> InstallPackage(PackageInstallProcessData package)
+    private async Task<bool> LoadPackage(PackageInstallProcessData package)
     {
         var allowTarget = GetCompatibilityLevelInfo();
 
@@ -694,7 +695,13 @@ internal class NugetV3Local
         if (!await DownloadPackageCatalog(package, false))
             return false;
 
-        return await FoundPackageDepedencies(package, package.VersionCatalog, package.SelectedFrameworkDeps);
+        var rootDepList = await FoundPackageDepedencies(package, package.VersionCatalog, package.SelectedFrameworkDeps);
+
+        package.DependecyList.Clear();
+
+        package.DependecyList.AddRange(rootDepList);
+
+        return true;
     }
 
     private async Task<bool> DownloadPackageCatalog(PackageInstallProcessData package, bool dep)
@@ -730,7 +737,7 @@ internal class NugetV3Local
         }
     }
 
-    private async Task<bool> FoundPackageDepedencies(PackageInstallProcessData package, NugetRegistrationCatalogEntryModel catalog, NugetRegistrationCatalogDepedencyGroupModel deps)
+    private async Task<List<PackageInstallProcessData>> FoundPackageDepedencies(PackageInstallProcessData package, NugetRegistrationCatalogEntryModel catalog, NugetRegistrationCatalogDepedencyGroupModel deps)
     {
         var newDepList = await FoundPackageDepedency(catalog, deps, package.DependecyList);
 
@@ -738,20 +745,20 @@ internal class NugetV3Local
 
         foreach (var item in newDepList)
         {
-            if (!await ProcessPackageDepedency(item, package))
-                return false;
+            await ProcessPackageDepedency(item, package);
         }
 
-        return true;
+        return newDepList;
     }
 
-    private async Task<bool> ProcessPackageDepedency(FoundPackage dep, PackageInstallProcessData package)
+    private async Task ProcessPackageDepedency(PackageInstallProcessData dep, PackageInstallProcessData package)
     {
-        await PackageRegistrationRequest(dep, () => { }, CancellationToken.None);
+        if (dep.Package.Registration == null)
+            await PackageRegistrationRequest(dep.Package, () => { }, CancellationToken.None);
 
         bool any = false;
 
-        NUtils.LogDebug(settings, $"ProcessPackageDepedency {dep.Package.Id}");
+        NUtils.LogDebug(settings, $"ProcessPackageDepedency {dep.Package.Package.Id}");
 
         foreach (var page in dep.Registration.Items)
         {
@@ -762,62 +769,59 @@ internal class NugetV3Local
 
                 var tfRange = OrderFramework.Skip(OrderFramework.IndexOf(package.SelectedFramework)).ToList();
 
-                var depGroup = depCatalog.CatalogEntry.DependencyGroups
+                dep.SelectedFrameworkDeps = depCatalog.CatalogEntry.DependencyGroups
                     .Where(x => OrderFramework.Contains(x.TargetFramework))
                     .OrderBy(x => x.TargetFramework.Equals(package.SelectedFramework))
                     .ThenBy(x => tfRange.IndexOf(x.TargetFramework))
                     .FirstOrDefault();
 
-                if (depGroup == null)
+                if (dep.SelectedFrameworkDeps == null)
                 {
                     NUtils.LogDebug(settings, $"Cannot find target framework {package.SelectedFramework} for {depCatalog.CatalogEntry.Id}@{depCatalog.CatalogEntry.Version}");
 
                     continue;
                 }
 
-                NUtils.LogDebug(settings, $"ProcessPackageDepedency ProcessPackageDepedencies {dep.Package.Id}@{depCatalog.CatalogEntry.Version}");
+                NUtils.LogDebug(settings, $"ProcessPackageDepedency ProcessPackageDepedencies {dep.Package.Package.Id}@{depCatalog.CatalogEntry.Version}");
 
-                if (depGroup.Dependencies == null)
-                    depGroup.Dependencies = new List<NugetRegistrationCatalogDepedencyModel>();
+                if (dep.SelectedFrameworkDeps.Dependencies == null)
+                    dep.SelectedFrameworkDeps.Dependencies = new List<NugetRegistrationCatalogDepedencyModel>();
 
-                if (depGroup.Dependencies.Any() == false ||
-                    await FoundPackageDepedencies(package, depCatalog.CatalogEntry, depGroup))
-                    any = true;
+                if (dep.SelectedFrameworkDeps.Dependencies.Any())
+                {
+                    dep.DependecyList.AddRange(await FoundPackageDepedencies(package, depCatalog.CatalogEntry, dep.SelectedFrameworkDeps));
+                }
             }
         }
-
-        return any;
     }
 
-    private async Task<List<FoundPackage>> FoundPackageDepedency(
+    private async Task<List<PackageInstallProcessData>> FoundPackageDepedency(
         NugetRegistrationCatalogEntryModel catalog,
         NugetRegistrationCatalogDepedencyGroupModel depGroup,
-        List<FoundPackage> packages)
+        List<PackageInstallProcessData> packages)
     {
-        var result = new List<FoundPackage>();
+        var result = new List<PackageInstallProcessData>();
 
         foreach (var dep in depGroup.Dependencies)
         {
-            var pkg = packages.FirstOrDefault(x => x.Package?.Id.Equals(dep.Name, StringComparison.OrdinalIgnoreCase) == true);
+            var pkg = packages.FirstOrDefault(x => x.Package.Package.Id.Equals(dep.Name, StringComparison.OrdinalIgnoreCase) == true);
 
             if (pkg == null)
             {
-                pkg = new FoundPackage()
+                pkg = new PackageInstallProcessData()
                 {
-                    Package = new NugetQueryPackageModel()
+                    Package = new RepositoryPackageViewModel()
                     {
-                        Id = dep.Name
+                        Package = new NugetQueryPackageModel()
+                        {
+                            Id = dep.Name
+                        }
                     }
                 };
 
                 await PackageVersionsRequest(dep.Name, (versions) =>
                 {
-                    pkg.Versions = versions.SelectMany(x => x.Item2.Select(ver => new FoundPackage.VersionInfo()
-                    {
-                        RepoName = x.Item1,
-                        Version = ver,
-                        NVersion = NuGetVersion.Parse(ver)
-                    })).ToList();
+                    pkg.Package.Versions = versions.SelectMany(x => x.Item2.Select(ver => ver)).Distinct().ToArray();
                 }, CancellationToken.None);
 
                 result.Add(pkg);
@@ -825,13 +829,15 @@ internal class NugetV3Local
 
             var depVer = VersionRange.Parse(dep.Range);
 
-            var newVerList = new List<FoundPackage.VersionInfo>();
+            var newVerList = new List<string>();
 
-            foreach (var item in pkg.Versions)
+            foreach (var item in pkg.Package.Versions)
             {
-                if (!depVer.Satisfies(item.NVersion))
+                var nuVer = NuGetVersion.Parse(item);
+
+                if (!depVer.Satisfies(nuVer))
                 {
-                    NUtils.LogDebug(settings, $"{dep.Name} - {depVer} no satisfies {item.NVersion}");
+                    NUtils.LogDebug(settings, $"{dep.Name} - {depVer} no satisfies {nuVer}");
                     continue;
                 }
 
@@ -841,7 +847,7 @@ internal class NugetV3Local
             if (newVerList.Any() == false)
                 throw new Exception($"No found source with exists depedency {dep.Name} for {catalog.Id}@{catalog.Version}");
 
-            pkg.Versions = newVerList;
+            pkg.Package.Versions = newVerList.ToArray();
         }
 
         return result;
@@ -881,7 +887,7 @@ internal class NugetV3Local
 
         public NugetRegistrationCatalogEntryModel VersionCatalog => Package.VersionCatalog;
 
-        public List<FoundPackage> DependecyList { get; } = new List<FoundPackage>();
+        public List<PackageInstallProcessData> DependecyList { get; } = new List<PackageInstallProcessData>();
 
         public string BuildDir { get; set; }
 

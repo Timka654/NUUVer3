@@ -1,12 +1,11 @@
-﻿using Assets.NuGetV3.Editor.Data.Interface;
-using NU.Core.Models.Response;
+﻿using NU.Core.Models.Response;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-public class RepositoryPackageViewModel : IRegistrableEntry
+public class RepositoryPackageViewModel
 {
     public NugetQueryPackageModel Package { get; set; }
 
