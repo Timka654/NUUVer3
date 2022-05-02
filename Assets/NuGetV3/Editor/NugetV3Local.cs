@@ -159,6 +159,15 @@ internal class NugetV3Local
 
     public async void OnInstallUninstallButtonClick(RepositoryPackageViewModel package)
     {
+        if (CheckPackageHandmadeCompatible(package.VersionCatalog).HasValue)
+        {
+            NugetV3Utils.LogError(settings, "Package contains in handmade list cannot be installed/removed/updated from Nuget package manager");
+
+            window.CancelInstallProcessState();
+
+            return;
+        }
+
         var installed = GetInstalledPackage(package.Package.Id);
 
         if (installed == null)
@@ -704,8 +713,8 @@ internal class NugetV3Local
         try
         {
             if (ProcessExistsDepsInstallPackage(process))
-            { 
-            
+            {
+
             }
             else if (await LoadPackage(process) && await BuildTempDir(process))
             {
@@ -870,10 +879,10 @@ internal class NugetV3Local
             }
             catch (InvalidPackageException ex)
             {
-                if (package.IgnoringPackage.Exists(x => x.VersionCatalog.Id == ex.InvalidPackageInfo.VersionCatalog.Id))
+                if (package.IgnoringPackageList.Exists(x => x.VersionCatalog.Id == ex.InvalidPackageInfo.VersionCatalog.Id))
                     return false;
 
-                package.IgnoringPackage.Add(ex.InvalidPackageInfo);
+                package.IgnoringPackageList.Add(ex.InvalidPackageInfo);
 
                 NUtils.LogDebug(settings, ex.ToString());
             }
@@ -891,9 +900,6 @@ internal class NugetV3Local
 
         } while (!validFound);
 
-        //if (!await DownloadPackageCatalog(package, false))
-        //    return false;
-
 
         return true;
     }
@@ -906,7 +912,6 @@ internal class NugetV3Local
         {
             if (!await ProcessPackageDepedency(item, mainPackage))
                 throw new InvalidPackageException($"Not Found valid deps in {item.Package.Package.Id} package in {processingPackage.Package.Package.Id}", processingPackage);
-
         }
 
         return newDepList;
@@ -915,7 +920,6 @@ internal class NugetV3Local
     private async Task<List<PackageInstallProcessData>> FoundPackageDepedency(
         PackageInstallProcessData processingPackage)
     {
-        //processingPackage.VersionCatalog, processingPackage.SelectedFrameworkDeps
         var result = new List<PackageInstallProcessData>();
 
         foreach (var dep in processingPackage.SelectedFrameworkDeps.Dependencies)
@@ -951,7 +955,7 @@ internal class NugetV3Local
 
             var hmPackage = handmadeInstalled.FirstOrDefault(x => x.Package.Equals(pkg.Package.Package.Id));
 
-            if (hmPackage == null)
+            if (hmPackage == null || string.IsNullOrWhiteSpace(hmPackage.Version))
             {
                 foreach (var item in pkg.Package.Versions)
                 {
@@ -1009,7 +1013,7 @@ internal class NugetV3Local
             var ta = depCatalog.CatalogEntry.DependencyGroups
                 .Where(x =>
                 OrderFramework.Contains(x.TargetFramework) &&
-                !mainPackage.IgnoringPackage.Any(z =>
+                !mainPackage.IgnoringPackageList.Any(z =>
                 z.VersionCatalog.Id == depCatalog.CatalogEntry.Id &&
                 z.VersionCatalog.Version == depCatalog.CatalogEntry.Version &&
                 (z.SelectedFramework == null || x.TargetFramework.Equals(z.SelectedFramework)))
@@ -1168,7 +1172,7 @@ internal class NugetV3Local
         if (hm == null)
             return null;
 
-        return catalog.Version == hm.Version;
+        return string.IsNullOrWhiteSpace(hm.Version) || catalog.Version == hm.Version;
     }
 
     private string GetNewPackageTempDir()

@@ -41,11 +41,13 @@ namespace NuGetV3.Data
             };
         }
 
-        public List<PackageInstallProcessData> IgnoringPackage { get; } = new List<PackageInstallProcessData>();
+        public List<PackageInstallProcessData> IgnoringPackageList { get; } = new List<PackageInstallProcessData>();
 
         public List<PackageInstallProcessData> InstallList { get; } = new List<PackageInstallProcessData>();
 
         public InstalledPackageData InstalledPackage { get; set; }
+
+        public List<InstalledPackageData> RemovePackageList { get; } = new List<InstalledPackageData>();
     }
 }
 
