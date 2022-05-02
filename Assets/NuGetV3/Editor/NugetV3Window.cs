@@ -482,7 +482,7 @@ public class NugetV3Window : EditorWindow
                                 if (newSelectedVersionIdx != selectedVersionIdx)
                                     OnSelectedPackageVersion(newSelectedVersionIdx, selectedVersionIdx);
 
-                                if (GUILayout.Button(LocalNuget.HasInstalled(selectedPackage.Package.Id) ? "Remove" : "Install", GUILayout.Width(90)))
+                                if (GUILayout.Button(LocalNuget.HasInstalledPackage(selectedPackage.Package.Id) ? "Remove" : "Install", GUILayout.Width(90)))
                                     OnInstallUninstallButtonClick(selectedPackage);
                             });
                         });

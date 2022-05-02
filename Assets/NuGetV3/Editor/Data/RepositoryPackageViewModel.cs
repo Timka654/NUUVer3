@@ -19,5 +19,13 @@ public class RepositoryPackageViewModel
 
     public DateTime? VersionsReceived { get; set; }
 
-    public RepositoryPackageViewModel Installed { get; set; }
+    public InstalledPackage Installed { get; set; }
+}
+
+
+public class InstalledPackage : RepositoryPackageViewModel
+{
+    public NugetRegistrationCatalogDepedencyGroupModel SelectedFrameworkDeps { get; set; }
+
+    public string SelectedFramework => SelectedFrameworkDeps?.TargetFramework;
 }
