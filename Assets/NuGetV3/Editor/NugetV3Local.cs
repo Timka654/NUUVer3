@@ -1051,7 +1051,7 @@ internal class NugetV3Local
         }
         else
         {
-            Directory.Delete(installedPath, true);
+            RemoveUnityDir(installedPath);
 
             InstalledPackages.Remove(ex);
 
@@ -1072,7 +1072,7 @@ internal class NugetV3Local
 
                 var depsPath = Path.Combine(GetNugetInstalledDepDir(), $"{idep.VersionCatalog.Id}@{idep.VersionCatalog.Version}");
 
-                Directory.Delete(depsPath, true);
+                RemoveUnityDir(depsPath);
 
                 InstalledDepPackages.Remove(idep);
             }
@@ -1108,12 +1108,26 @@ internal class NugetV3Local
         //if(!Directory.Exists(dir))
         //    Directory.CreateDirectory(dir);
 
-        if (Directory.Exists(dir))
-            Directory.Delete(dir, true);
+        RemoveUnityDir(dir);
 
         Directory.CreateDirectory(dir);
 
         return dir;
+    }
+
+    private void RemoveUnityDir(string path)
+    {
+        path = path.TrimEnd('\\').TrimEnd('/');
+
+        if (!Directory.Exists(path))
+            return;
+
+        Directory.Delete(path, true);
+
+        path += ".meta";
+
+        if (File.Exists(path))
+            File.Delete(path);
     }
 
     private class PackageInstallProcessData
