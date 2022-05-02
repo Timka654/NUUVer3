@@ -13,7 +13,7 @@ public class RepositoryPackageViewModel
 
     public NugetRegistrationCatalogEntryModel VersionCatalog { get; set; }
 
-    public string[] Versions { get; set; }
+    public List<string> Versions { get; set; }
 
     public string SelectedVersion { get; set; }
 

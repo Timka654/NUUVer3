@@ -56,7 +56,9 @@ public class NugetV3Window : EditorWindow
 
         LocalNuget.InitializeNuGet();
 
-        OnChangeTab(NugetV3TabEnum.Browse, NugetV3TabEnum.Browse);
+        CurrentTab = NugetV3TabEnum.Browse;
+
+        OnChangeTab(CurrentTab, CurrentTab);
 
         OnRefreshButtonClick();
     }
@@ -88,6 +90,7 @@ public class NugetV3Window : EditorWindow
 
         packageListBodyScroll = Vector2.zero;
 
+
         PackageListTabMap[CurrentTab].Clear();
 
         LocalNuget.Query(latestSearchContent, true);
@@ -98,7 +101,10 @@ public class NugetV3Window : EditorWindow
         editableRepositories = nugetRepositorySources;
     }
 
-    private void OnRepositoryListChanged() { } // Not Use
+    internal void UpdateEditableHandmadeInstalled(List<NugetHandmakeInstalled> nugetRepositorySources)
+    {
+        editableHandmadeInstalled = nugetRepositorySources;
+    }
 
     private void OnChangeTab(NugetV3TabEnum newTab, NugetV3TabEnum oldTab)
     {
@@ -112,7 +118,10 @@ public class NugetV3Window : EditorWindow
 
     private void OnSettingsSaveButtonClick()
     {
-        LocalNuget.UpdateSettings(editableRepositories.Select(x => x.Clone()).ToList(), editableSettings.Clone());
+        LocalNuget.UpdateSettings(
+            editableRepositories.Select(x => x.Clone()).ToList(),
+            editableHandmadeInstalled.Select(x=>x.Clone()).ToList(),
+            editableSettings.Clone());
     }
 
     private void OnSelectPackageButtonClick(RepositoryPackageViewModel package)
@@ -193,6 +202,18 @@ public class NugetV3Window : EditorWindow
             nuDefaultIcon = AssetDatabase.LoadAssetAtPath<Sprite>(path);
     }
 
+    private SerializedProperty edtableRepositoriesProperty;
+    private SerializedProperty edtableHandmadeInstalledProperty;
+    private SerializedObject thisSO;
+
+    private void InitializeGUISettings()
+    {
+        edtableRepositoriesProperty = thisSO.FindProperty(nameof(editableRepositories));
+
+        edtableHandmadeInstalledProperty = thisSO.FindProperty(nameof(editableHandmadeInstalled));
+    }
+
+
     #endregion
 
     private static readonly GUIContent[] GUITabButtons = new GUIContent[]
@@ -226,11 +247,17 @@ public class NugetV3Window : EditorWindow
 
     [SerializeField] public NugetSettings editableSettings;
 
+    [SerializeField] public List<NugetHandmakeInstalled> editableHandmadeInstalled;
+
     private void InitializeGUI()
     {
+        thisSO = new SerializedObject(this as ScriptableObject);
+
         InitializeGUIStyles();
 
         InitializeGUIResources();
+
+        InitializeGUISettings();
 
         bodyResizer = new ResizeHorizontalView(this, leftSideWidth, HeaderHeight, position.height - HeaderHeight);
     }
@@ -315,17 +342,18 @@ public class NugetV3Window : EditorWindow
     {
         GLayoutUtils.VerticalControlGroup(() =>
         {
-            SerializedObject so = new SerializedObject(this as ScriptableObject);
-            SerializedProperty stringsProperty = so.FindProperty(nameof(editableRepositories));
-            EditorGUILayout.PropertyField(stringsProperty, new GUIContent("Repository"), true); // True means show children
-
-            if (so.ApplyModifiedProperties()) OnRepositoryListChanged();
+            EditorGUILayout.PropertyField(edtableRepositoriesProperty, new GUIContent("Repository"), true); // True means show children
 
             EditorGUILayout.LabelField("Console Output");
             editableSettings.ConsoleOutput = EditorGUILayout.Toggle(editableSettings.ConsoleOutput);
 
             EditorGUILayout.LabelField("Relative Packages Path");
             editableSettings.RelativePackagePath = GUILayout.TextField(editableSettings.RelativePackagePath);
+
+            EditorGUILayout.PropertyField(edtableHandmadeInstalledProperty, new GUIContent("Handmade installed packages"), true); // True means show children
+
+            thisSO.ApplyModifiedProperties();
+
             GUILayout.Space(5);
             GLayoutUtils.HorizontalControlGroup(() =>
             {
@@ -449,7 +477,7 @@ public class NugetV3Window : EditorWindow
 
                             GLayoutUtils.HorizontalControlGroup(() =>
                             {
-                                newSelectedVersionIdx = EditorGUILayout.Popup(selectedVersionIdx, selectedPackage.Versions, GUILayout.MaxWidth(240));
+                                newSelectedVersionIdx = EditorGUILayout.Popup(selectedVersionIdx, selectedPackage.Versions.ToArray(), GUILayout.MaxWidth(240));
 
                                 if (newSelectedVersionIdx != selectedVersionIdx)
                                     OnSelectedPackageVersion(newSelectedVersionIdx, selectedVersionIdx);
