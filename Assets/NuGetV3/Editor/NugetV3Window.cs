@@ -120,7 +120,7 @@ public class NugetV3Window : EditorWindow
     {
         LocalNuget.UpdateSettings(
             editableRepositories.Select(x => x.Clone()).ToList(),
-            editableHandmadeInstalled.Select(x=>x.Clone()).ToList(),
+            editableHandmadeInstalled.Select(x => x.Clone()).ToList(),
             editableSettings.Clone());
     }
 
@@ -202,17 +202,6 @@ public class NugetV3Window : EditorWindow
             nuDefaultIcon = AssetDatabase.LoadAssetAtPath<Sprite>(path);
     }
 
-    private SerializedProperty edtableRepositoriesProperty;
-    private SerializedProperty edtableHandmadeInstalledProperty;
-    private SerializedObject thisSO;
-
-    private void InitializeGUISettings()
-    {
-        edtableRepositoriesProperty = thisSO.FindProperty(nameof(editableRepositories));
-
-        edtableHandmadeInstalledProperty = thisSO.FindProperty(nameof(editableHandmadeInstalled));
-    }
-
 
     #endregion
 
@@ -251,13 +240,9 @@ public class NugetV3Window : EditorWindow
 
     private void InitializeGUI()
     {
-        thisSO = new SerializedObject(this as ScriptableObject);
-
         InitializeGUIStyles();
 
         InitializeGUIResources();
-
-        InitializeGUISettings();
 
         bodyResizer = new ResizeHorizontalView(this, leftSideWidth, HeaderHeight, position.height - HeaderHeight);
     }
@@ -342,16 +327,24 @@ public class NugetV3Window : EditorWindow
     {
         GLayoutUtils.VerticalControlGroup(() =>
         {
-            EditorGUILayout.PropertyField(edtableRepositoriesProperty, new GUIContent("Repository"), true); // True means show children
+            var thisSO = new SerializedObject(this as ScriptableObject);
 
+            if (editableRepositories != null)
+            {
+                var edtableRepositoriesProperty = thisSO.FindProperty(nameof(editableRepositories));
+                EditorGUILayout.PropertyField(edtableRepositoriesProperty, new GUIContent("Repository"), true); // True means show children
+            }
             EditorGUILayout.LabelField("Console Output");
             editableSettings.ConsoleOutput = EditorGUILayout.Toggle(editableSettings.ConsoleOutput);
 
             EditorGUILayout.LabelField("Relative Packages Path");
             editableSettings.RelativePackagePath = GUILayout.TextField(editableSettings.RelativePackagePath);
 
-            EditorGUILayout.PropertyField(edtableHandmadeInstalledProperty, new GUIContent("Handmade installed packages"), true); // True means show children
-
+            if (editableHandmadeInstalled != null)
+            {
+                var edtableHandmadeInstalledProperty = thisSO.FindProperty(nameof(editableHandmadeInstalled));
+                EditorGUILayout.PropertyField(edtableHandmadeInstalledProperty, new GUIContent("Handmade installed packages"), true); // True means show children
+            }
             thisSO.ApplyModifiedProperties();
 
             GUILayout.Space(5);
