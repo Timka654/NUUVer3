@@ -1,63 +1,70 @@
+#if UNITY_EDITOR
+
 using System;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
-public class GLayoutUtils
+namespace NuGetV3.Utils
 {
-    public static void HorizontalControlGroup(Action inGroup)
+    public class GLayoutUtils
     {
-        GUILayout.BeginHorizontal();
+        public static void HorizontalControlGroup(Action inGroup)
+        {
+            GUILayout.BeginHorizontal();
 
-        inGroup();
+            inGroup();
 
-        GUILayout.EndHorizontal();
-    }
+            GUILayout.EndHorizontal();
+        }
 
-    public static void HorizontalControlGroup(Action inGroup, GUIStyle style)
-    {
-        GUILayout.BeginHorizontal(style);
+        public static void HorizontalControlGroup(Action inGroup, GUIStyle style)
+        {
+            GUILayout.BeginHorizontal(style);
 
-        inGroup();
+            inGroup();
 
-        GUILayout.EndHorizontal();
-    }
+            GUILayout.EndHorizontal();
+        }
 
-    public static void HorizontalControlGroup(Action inGroup, params GUILayoutOption[] options)
-    {
-        GUILayout.BeginHorizontal(options);
+        public static void HorizontalControlGroup(Action inGroup, params GUILayoutOption[] options)
+        {
+            GUILayout.BeginHorizontal(options);
 
-        inGroup();
+            inGroup();
 
-        GUILayout.EndHorizontal();
-    }
+            GUILayout.EndHorizontal();
+        }
 
-    public static void HorizontalControlGroup(Action inGroup, GUIStyle style, params GUILayoutOption[] options)
-    {
-        GUILayout.BeginHorizontal(style, options);
+        public static void HorizontalControlGroup(Action inGroup, GUIStyle style, params GUILayoutOption[] options)
+        {
+            GUILayout.BeginHorizontal(style, options);
 
-        inGroup();
+            inGroup();
 
-        GUILayout.EndHorizontal();
-    }
+            GUILayout.EndHorizontal();
+        }
 
-    public static void VerticalControlGroup(Action inGroup, params GUILayoutOption[] options)
-    {
-        GUILayout.BeginVertical(options);
+        public static void VerticalControlGroup(Action inGroup, params GUILayoutOption[] options)
+        {
+            GUILayout.BeginVertical(options);
 
-        inGroup();
+            inGroup();
 
-        GUILayout.EndVertical();
-    }
+            GUILayout.EndVertical();
+        }
 
-    public static Vector2 ScrollViewGroup(Vector2 currentPosition, Action inGroup)
-    {
-        currentPosition = GUILayout.BeginScrollView(currentPosition);
+        public static Vector2 ScrollViewGroup(Vector2 currentPosition, Action inGroup)
+        {
+            currentPosition = GUILayout.BeginScrollView(currentPosition);
 
-        inGroup();
+            inGroup();
 
-        GUILayout.EndScrollView();
+            GUILayout.EndScrollView();
 
-        return currentPosition;
+            return currentPosition;
+        }
     }
 }
+
+#endif

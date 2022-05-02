@@ -1,31 +1,30 @@
-﻿using NU.Core.Models.Response;
+﻿#if UNITY_EDITOR
+
+using NU.Core.Models.Response;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-public class RepositoryPackageViewModel
+namespace NuGetV3.Data
 {
-    public NugetQueryPackageModel Package { get; set; }
+    public class RepositoryPackageViewModel
+    {
+        public NugetQueryPackageModel Package { get; set; }
 
-    public NugetRegistrationResponseModel Registration { get; set; }
+        public NugetRegistrationResponseModel Registration { get; set; }
 
-    public NugetRegistrationCatalogEntryModel VersionCatalog { get; set; }
+        public NugetRegistrationCatalogEntryModel VersionCatalog { get; set; }
 
-    public List<string> Versions { get; set; }
+        public List<string> Versions { get; set; }
 
-    public string SelectedVersion { get; set; }
+        public string SelectedVersion { get; set; }
 
-    public DateTime? VersionsReceived { get; set; }
+        public DateTime? VersionsReceived { get; set; }
 
-    public InstalledPackage Installed { get; set; }
+        public InstalledPackageData Installed { get; set; }
+    }
 }
 
-
-public class InstalledPackage : RepositoryPackageViewModel
-{
-    public NugetRegistrationCatalogDepedencyGroupModel SelectedFrameworkDeps { get; set; }
-
-    public string SelectedFramework => SelectedFrameworkDeps?.TargetFramework;
-}
+#endif

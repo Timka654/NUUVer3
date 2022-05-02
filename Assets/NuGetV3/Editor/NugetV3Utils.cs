@@ -1,11 +1,13 @@
-﻿using System;
+﻿#if UNITY_EDITOR
+
+using NuGetV3.Data;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
 using UnityEngine;
-#if UNITY_EDITOR
 
 internal class NugetV3Utils
 {

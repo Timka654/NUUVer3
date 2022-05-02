@@ -1,16 +1,23 @@
-﻿using System;
+﻿#if UNITY_EDITOR
+
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using UnityEngine;
 
-[Serializable]
-public class NugetRepositorySource
+namespace NuGetV3.Data
 {
-    [SerializeField] public string Name;
+    [Serializable]
+    public class NugetRepositorySource
+    {
+        [SerializeField] public string Name;
 
-    [SerializeField] public string Value;
+        [SerializeField] public string Value;
 
-    public NugetRepositorySource Clone() => base.MemberwiseClone() as NugetRepositorySource;
+        public NugetRepositorySource Clone() => base.MemberwiseClone() as NugetRepositorySource;
+    }
 }
+
+#endif

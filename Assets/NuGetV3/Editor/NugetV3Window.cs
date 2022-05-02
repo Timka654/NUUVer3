@@ -1,5 +1,9 @@
+#if UNITY_EDITOR
+
 using NU.Core.Models.Response;
 using NuGet.Versioning;
+using NuGetV3.Data;
+using NuGetV3.Utils;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -13,7 +17,6 @@ using System.Threading.Tasks;
 using UnityEditor;
 using UnityEngine;
 
-#if UNITY_EDITOR
 [Serializable]
 public class NugetV3Window : EditorWindow
 {

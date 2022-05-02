@@ -1,6 +1,11 @@
-﻿using NU.Core;
+﻿#if UNITY_EDITOR
+
+using NU.Core;
 using NU.Core.Models.Response;
 using NuGet.Versioning;
+using NuGetV3;
+using NuGetV3.Data;
+using NuGetV3.Utils.Exceptions;
 using PlasticPipe.PlasticProtocol.Server.Stubs;
 using System;
 using System.Collections.Concurrent;
@@ -188,9 +193,9 @@ internal class NugetV3Local
         LoadInstalledDepedency();
     }
 
-    private List<InstalledPackage> LoadPackageCatalog(string catalog)
+    private List<InstalledPackageData> LoadPackageCatalog(string catalog)
     {
-        var result = new List<InstalledPackage>();
+        var result = new List<InstalledPackageData>();
 
         var di = new DirectoryInfo(catalog);
 
@@ -198,7 +203,7 @@ internal class NugetV3Local
         {
             foreach (var item in di.GetFiles("catalog.json", SearchOption.AllDirectories))
             {
-                result.Add(JsonSerializer.Deserialize<InstalledPackage>(File.ReadAllText(item.FullName)));
+                result.Add(JsonSerializer.Deserialize<InstalledPackageData>(File.ReadAllText(item.FullName)));
             }
         }
 
@@ -669,10 +674,10 @@ internal class NugetV3Local
 
     #endregion
 
-    public InstalledPackage GetInstalledPackage(string name)
+    public InstalledPackageData GetInstalledPackage(string name)
         => InstalledPackages.FirstOrDefault(x => name.Equals(x.VersionCatalog.Id));
 
-    public InstalledPackage GetInstalledDepPackage(string name)
+    public InstalledPackageData GetInstalledDepPackage(string name)
         => InstalledDepPackages.FirstOrDefault(x => name.Equals(x.VersionCatalog.Id));
 
     public NugetHandmakeInstalled GetHandMadeInstalledPackage(string name)
@@ -681,9 +686,9 @@ internal class NugetV3Local
     public bool HasInstalledPackage(string name)
         => GetInstalledPackage(name) != null || GetHandMadeInstalledPackage(name) != null;
 
-    private List<InstalledPackage> InstalledPackages = new List<InstalledPackage>();
+    private List<InstalledPackageData> InstalledPackages = new List<InstalledPackageData>();
 
-    private List<InstalledPackage> InstalledDepPackages = new List<InstalledPackage>();
+    private List<InstalledPackageData> InstalledDepPackages = new List<InstalledPackageData>();
 
     private ConcurrentBag<PackageInstallProcessData> PackageTemp { get; } = new ConcurrentBag<PackageInstallProcessData>();
 
@@ -805,7 +810,7 @@ internal class NugetV3Local
 
             nugetFile.DumpFrameworkFiles(contentPath, processPackage.SelectedFramework.TrimStart('.'));
 
-            processPackage.InstalledPackage = new InstalledPackage
+            processPackage.InstalledPackage = new InstalledPackageData
             {
                 VersionCatalog = processPackage.VersionCatalog,
                 SelectedFrameworkDeps = processPackage.SelectedFrameworkDeps,
@@ -1049,7 +1054,7 @@ internal class NugetV3Local
         return false;
     }
 
-    private Task RemovePackage(InstalledPackage ex)
+    private Task RemovePackage(InstalledPackageData ex)
     {
         if (CheckPackageNeedAsDep(ex))
         {
@@ -1069,7 +1074,7 @@ internal class NugetV3Local
         return Task.CompletedTask;
     }
 
-    private void LoadPackageDeps(InstalledPackage package, List<NugetRegistrationCatalogDepedencyModel> deps)
+    private void LoadPackageDeps(InstalledPackageData package, List<NugetRegistrationCatalogDepedencyModel> deps)
     {
         foreach (var item in package.SelectedFrameworkDeps.Dependencies)
         {
@@ -1085,7 +1090,7 @@ internal class NugetV3Local
         }
     }
 
-    private void MoveInstalledPackageToDep(InstalledPackage package)
+    private void MoveInstalledPackageToDep(InstalledPackageData package)
     {
         if (!InstalledPackages.Contains(package))
             throw new Exception($"InstalledPackages not have {package.VersionCatalog.Id}");
@@ -1101,7 +1106,7 @@ internal class NugetV3Local
         InstalledDepPackages.Add(package);
     }
 
-    private void MoveDepToInstalledPackage(InstalledPackage package)
+    private void MoveDepToInstalledPackage(InstalledPackageData package)
     {
         if (!InstalledDepPackages.Contains(package))
             throw new Exception($"InstalledDepPackages not have {package.VersionCatalog.Id}");
@@ -1117,7 +1122,7 @@ internal class NugetV3Local
         InstalledPackages.Add(package);
     }
 
-    private void RemoveInstalledPackage(InstalledPackage package)
+    private void RemoveInstalledPackage(InstalledPackageData package)
     {
         var installedPath = Path.Combine(GetNugetInstalledPackagesDir(), $"{package.VersionCatalog.Id}@{package.VersionCatalog.Version}");
 
@@ -1126,7 +1131,7 @@ internal class NugetV3Local
         InstalledPackages.Remove(package);
     }
 
-    private void ProcessingRemovedPackage(InstalledPackage package)
+    private void ProcessingRemovedPackage(InstalledPackageData package)
     {
         List<NugetRegistrationCatalogDepedencyModel> deps = new List<NugetRegistrationCatalogDepedencyModel>();
 
@@ -1150,7 +1155,7 @@ internal class NugetV3Local
         }
     }
 
-    private bool CheckPackageNeedAsDep(InstalledPackage dep, List<NugetRegistrationCatalogDepedencyModel> ignoreDeps = null)
+    private bool CheckPackageNeedAsDep(InstalledPackageData dep, List<NugetRegistrationCatalogDepedencyModel> ignoreDeps = null)
     {
         return InstalledPackages.Exists(x => x.SelectedFrameworkDeps.Dependencies.Any(z => z.Name == dep.VersionCatalog.Id)) ||
             InstalledDepPackages.Exists(x => (ignoreDeps == null || !ignoreDeps.Exists(z => z.Name == x.VersionCatalog.Id)) && x.SelectedFrameworkDeps.Dependencies.Any(z => z.Name == dep.VersionCatalog.Id));
@@ -1195,62 +1200,6 @@ internal class NugetV3Local
             File.Delete(path);
     }
 
-    private class PackageInstallProcessData
-    {
-        public RepositoryPackageViewModel Package { get; set; }
-
-        public string Version => Package.SelectedVersion;
-
-        public NugetRegistrationResponseModel Registration => Package.Registration;
-
-        public NugetRegistrationCatalogEntryModel VersionCatalog => Package.VersionCatalog;
-
-        public List<PackageInstallProcessData> DependecyList { get; } = new List<PackageInstallProcessData>();
-
-        public string BuildDir { get; set; }
-
-        public NugetRegistrationCatalogDepedencyGroupModel SelectedFrameworkDeps { get; set; }
-
-        public string SelectedFramework => SelectedFrameworkDeps?.TargetFramework;
-
-        public PackageInstallProcessData Clone()
-        {
-            return new PackageInstallProcessData()
-            {
-                Package = new RepositoryPackageViewModel()
-                {
-                    Package = Package.Package,
-                    Registration = Package.Registration,
-                    Versions = new List<string>(Package.Versions)
-
-                }
-            };
-        }
-
-        public List<PackageInstallProcessData> IgnoringPackage { get; } = new List<PackageInstallProcessData>();
-
-        public List<PackageInstallProcessData> InstallList { get; } = new List<PackageInstallProcessData>();
-
-        public InstalledPackage InstalledPackage { get; set; }
-    }
-
-    private class InvalidPackageException : Exception
-    {
-        public PackageInstallProcessData InvalidPackageInfo { get; }
-
-        public InvalidPackageException(string message, PackageInstallProcessData package) : base(message)
-        {
-            InvalidPackageInfo = package;
-        }
-    }
-
-    private class NotFoundValidPackageInfoException : Exception
-    {
-        public PackageInstallProcessData InvalidPackageInfo { get; }
-
-        public NotFoundValidPackageInfoException(string message, PackageInstallProcessData package) : base(message)
-        {
-            InvalidPackageInfo = package;
-        }
-    }
 }
+
+#endif
