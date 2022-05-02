@@ -711,6 +711,14 @@ internal class NugetV3Local
                     installDir.Create();
 
                 MoveDir(process.BuildDir, installDir.FullName);
+
+
+
+                //https://docs.unity3d.com/ScriptReference/EditorUtility.RequestScriptReload.html
+                //EditorUtility.RequestScriptReload();
+                AssetDatabase.Refresh();
+                //AssetDatabase.Refresh(ImportAssetOptions.ForceUpdate);
+                //AssetDatabase.ForceReserializeAssets()
             }
         }
         catch (Exception ex)
@@ -776,7 +784,7 @@ internal class NugetV3Local
             nugetFile.DumpFrameworkFiles(contentPath, processPackage.SelectedFramework.TrimStart('.'));
 
 
-            File.WriteAllText(Path.Combine(packageDir, "catalog.json"), JsonSerializer.Serialize(processPackage.VersionCatalog));
+            File.WriteAllText(Path.Combine(packageDir, "catalog.json"), JsonSerializer.Serialize(processPackage.VersionCatalog, NUtils.JsonOptions));
 
 
             return true;
