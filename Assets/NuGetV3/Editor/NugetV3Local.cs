@@ -692,12 +692,17 @@ internal class NugetV3Local
         var process = new PackageInstallProcessData()
         {
             Package = package,
-            BuildDir = GetNewPackageTempDir()
+            BuildDir = GetNewPackageTempDir(),
+            InstalledPackage = GetInstalledDepPackage(package.Package.Id)
         };
 
         try
         {
-            if (await LoadPackage(process) && await BuildTempDir(process))
+            if (ProcessExistsDepsInstallPackage(process))
+            { 
+            
+            }
+            else if (await LoadPackage(process) && await BuildTempDir(process))
             {
                 var installDir = new DirectoryInfo(GetNugetInstalledDir());
 
@@ -723,6 +728,23 @@ internal class NugetV3Local
         Directory.Delete(process.BuildDir, true);
     }
 
+    private bool ProcessExistsDepsInstallPackage(PackageInstallProcessData process)
+    {
+        if (process.InstalledPackage != null)
+        {
+            if (process.InstalledPackage.SelectedVersion == process.Package.SelectedVersion)
+            {
+                MoveDepToInstalledPackage(process.InstalledPackage);
+
+                AssetDatabase.Refresh();
+
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     private void MoveDir(string sourceDir, string destDir)
     {
         var sourceDI = new DirectoryInfo(sourceDir);
@@ -731,14 +753,19 @@ internal class NugetV3Local
         {
             var destFile = new FileInfo(Path.Combine(destDir, Path.GetRelativePath(sourceDI.FullName, item.FullName)));
 
-            if (!destFile.Directory.Exists)
-                destFile.Directory.Create();
-
             if (destFile.Exists)
                 destFile.Delete();
 
+            if (!destFile.Directory.Exists)
+                destFile.Directory.Create();
+
             item.MoveTo(destFile.FullName);
         }
+
+        var meta = new FileInfo($"{sourceDI.FullName.TrimEnd('/').TrimEnd('\\')}.meta");
+
+        if (meta.Exists)
+            meta.Delete();
     }
 
     private async Task<bool> BuildTempDir(PackageInstallProcessData package)
@@ -880,87 +907,6 @@ internal class NugetV3Local
         return newDepList;
     }
 
-    private async Task<bool> ProcessPackageDepedency(PackageInstallProcessData dep, PackageInstallProcessData mainPackage)
-    {
-        if (dep.Package.Registration == null)
-            await PackageRegistrationRequest(dep.Package, () => { }, CancellationToken.None);
-
-        NUtils.LogDebug(settings, $"ProcessPackageDepedency {dep.Package.Package.Id}");
-
-        var validItems = dep.Registration.Items
-            .SelectMany(x => x.Items)
-            .Where(x => dep.Package.Versions.Contains(x.CatalogEntry.Version))
-            .OrderBy(x => dep.Package.Versions.IndexOf(x.CatalogEntry.Version))
-            .ToArray();
-
-        foreach (var depCatalog in validItems)
-        {
-            if (depCatalog.CatalogEntry.DependencyGroups == null)
-                continue;
-
-            var tfRange = OrderFramework.Skip(OrderFramework.IndexOf(mainPackage.SelectedFramework)).ToList();
-
-            dep.Package.VersionCatalog = depCatalog.CatalogEntry;
-
-            var ta = depCatalog.CatalogEntry.DependencyGroups
-                .Where(x =>
-                OrderFramework.Contains(x.TargetFramework) &&
-                !mainPackage.IgnoringPackage.Any(z =>
-                z.VersionCatalog.Id == depCatalog.CatalogEntry.Id &&
-                z.VersionCatalog.Version == depCatalog.CatalogEntry.Version &&
-                (z.SelectedFramework == null || x.TargetFramework.Equals(z.SelectedFramework)))
-                )
-                .OrderByDescending(x => x.TargetFramework.Equals(mainPackage.SelectedFramework))
-                .ThenBy(x => tfRange.IndexOf(x.TargetFramework))
-                .ToArray();
-
-
-            dep.SelectedFrameworkDeps = ta.FirstOrDefault();
-
-            if (dep.SelectedFrameworkDeps == null)
-            {
-                NUtils.LogDebug(settings, $"Cannot find target framework {mainPackage.SelectedFramework} for {depCatalog.CatalogEntry.Id}@{depCatalog.CatalogEntry.Version}");
-
-                continue;
-            }
-
-            var hmResult = CheckPackageHandmadeCompatible(dep, depCatalog.CatalogEntry);
-
-            if (!hmResult.HasValue)
-                mainPackage.InstallList.Add(dep);
-            else if (hmResult == false)
-                continue;
-            else
-                return true;
-
-            dep.Package.VersionCatalog = depCatalog.CatalogEntry;
-            dep.Package.SelectedVersion = dep.Package.VersionCatalog.Version;
-
-            if (dep.SelectedFrameworkDeps.Dependencies == null)
-                dep.SelectedFrameworkDeps.Dependencies = new List<NugetRegistrationCatalogDepedencyModel>();
-
-            if (dep.SelectedFrameworkDeps.Dependencies.Any())
-            {
-                dep.DependecyList.AddRange(await FoundPackageDepedencies(mainPackage, dep));
-            }
-
-            return true;
-        }
-
-        return false;
-    }
-
-    private bool? CheckPackageHandmadeCompatible(PackageInstallProcessData package, NugetRegistrationCatalogEntryModel catalog)
-    {
-        var hm = handmadeInstalled.FirstOrDefault(x => x.Package == catalog.Id);
-
-        if (hm == null)
-            return null;
-
-        return catalog.Version == hm.Version;
-    }
-
-
     private async Task<List<PackageInstallProcessData>> FoundPackageDepedency(
         PackageInstallProcessData processingPackage)
     {
@@ -1033,49 +979,87 @@ internal class NugetV3Local
         return result;
     }
 
+    private async Task<bool> ProcessPackageDepedency(PackageInstallProcessData dep, PackageInstallProcessData mainPackage)
+    {
+        if (dep.Package.Registration == null)
+            await PackageRegistrationRequest(dep.Package, () => { }, CancellationToken.None);
+
+        NUtils.LogDebug(settings, $"ProcessPackageDepedency {dep.Package.Package.Id}");
+
+        var validItems = dep.Registration.Items
+            .SelectMany(x => x.Items)
+            .Where(x => dep.Package.Versions.Contains(x.CatalogEntry.Version))
+            .OrderBy(x => dep.Package.Versions.IndexOf(x.CatalogEntry.Version))
+            .ToArray();
+
+        foreach (var depCatalog in validItems)
+        {
+            if (depCatalog.CatalogEntry.DependencyGroups == null)
+                continue;
+
+            var tfRange = OrderFramework.Skip(OrderFramework.IndexOf(mainPackage.SelectedFramework)).ToList();
+
+            dep.Package.VersionCatalog = depCatalog.CatalogEntry;
+
+            var ta = depCatalog.CatalogEntry.DependencyGroups
+                .Where(x =>
+                OrderFramework.Contains(x.TargetFramework) &&
+                !mainPackage.IgnoringPackage.Any(z =>
+                z.VersionCatalog.Id == depCatalog.CatalogEntry.Id &&
+                z.VersionCatalog.Version == depCatalog.CatalogEntry.Version &&
+                (z.SelectedFramework == null || x.TargetFramework.Equals(z.SelectedFramework)))
+                )
+                .OrderByDescending(x => x.TargetFramework.Equals(mainPackage.SelectedFramework))
+                .ThenBy(x => tfRange.IndexOf(x.TargetFramework))
+                .ToArray();
+
+
+            dep.SelectedFrameworkDeps = ta.FirstOrDefault();
+
+            if (dep.SelectedFrameworkDeps == null)
+            {
+                NUtils.LogDebug(settings, $"Cannot find target framework {mainPackage.SelectedFramework} for {depCatalog.CatalogEntry.Id}@{depCatalog.CatalogEntry.Version}");
+
+                continue;
+            }
+
+            var hmResult = CheckPackageHandmadeCompatible(depCatalog.CatalogEntry);
+
+            if (!hmResult.HasValue)
+                mainPackage.InstallList.Add(dep);
+            else if (hmResult == false)
+                continue;
+            else
+                return true;
+
+            dep.Package.VersionCatalog = depCatalog.CatalogEntry;
+            dep.Package.SelectedVersion = dep.Package.VersionCatalog.Version;
+
+            if (dep.SelectedFrameworkDeps.Dependencies == null)
+                dep.SelectedFrameworkDeps.Dependencies = new List<NugetRegistrationCatalogDepedencyModel>();
+
+            if (dep.SelectedFrameworkDeps.Dependencies.Any())
+            {
+                dep.DependecyList.AddRange(await FoundPackageDepedencies(mainPackage, dep));
+            }
+
+            return true;
+        }
+
+        return false;
+    }
+
     private Task RemovePackage(InstalledPackage ex)
     {
-        var installedPath = Path.Combine(GetNugetInstalledPackagesDir(), $"{ex.VersionCatalog.Id}@{ex.VersionCatalog.Version}");
-
-        if (
-            InstalledPackages.Exists(x => x.SelectedFrameworkDeps.Dependencies.Any(z => z.Name == ex.VersionCatalog.Id)) ||
-            InstalledDepPackages.Exists(x => x.SelectedFrameworkDeps.Dependencies.Any(z => z.Name == ex.VersionCatalog.Id)))
+        if (CheckPackageNeedAsDep(ex))
         {
-
-            var depsPath = Path.Combine(GetNugetInstalledDepDir(), $"{ex.VersionCatalog.Id}@{ex.VersionCatalog.Version}");
-
-            MoveDir(installedPath, depsPath);
-
-            InstalledPackages.Remove(ex);
-            InstalledDepPackages.Add(ex);
+            MoveInstalledPackageToDep(ex);
         }
         else
         {
-            RemoveUnityDir(installedPath);
+            RemoveInstalledPackage(ex);
 
-            InstalledPackages.Remove(ex);
-
-            List<NugetRegistrationCatalogDepedencyModel> deps = new List<NugetRegistrationCatalogDepedencyModel>();
-
-            LoadPackageDeps(ex, deps);
-
-            foreach (var dep in deps)
-            {
-                var idep = GetInstalledDepPackage(dep.Name);
-
-                if (idep == null)
-                    continue;
-
-                if (InstalledPackages.Exists(x => x.SelectedFrameworkDeps.Dependencies.Any(z => z.Name == idep.VersionCatalog.Id)) ||
-                    InstalledDepPackages.Exists(x => !deps.Exists(z => z.Name == x.VersionCatalog.Id) && x.SelectedFrameworkDeps.Dependencies.Any(z => z.Name == idep.VersionCatalog.Id)))
-                    continue;
-
-                var depsPath = Path.Combine(GetNugetInstalledDepDir(), $"{idep.VersionCatalog.Id}@{idep.VersionCatalog.Version}");
-
-                RemoveUnityDir(depsPath);
-
-                InstalledDepPackages.Remove(idep);
-            }
+            ProcessingRemovedPackage(ex);
         }
 
         window.CancelInstallProcessState();
@@ -1099,6 +1083,87 @@ internal class NugetV3Local
             if (d != null)
                 LoadPackageDeps(d, deps);
         }
+    }
+
+    private void MoveInstalledPackageToDep(InstalledPackage package)
+    {
+        if (!InstalledPackages.Contains(package))
+            throw new Exception($"InstalledPackages not have {package.VersionCatalog.Id}");
+
+
+        var installedPath = Path.Combine(GetNugetInstalledPackagesDir(), $"{package.VersionCatalog.Id}@{package.VersionCatalog.Version}");
+
+        var depsPath = Path.Combine(GetNugetInstalledDepDir(), $"{package.VersionCatalog.Id}@{package.VersionCatalog.Version}");
+
+        MoveDir(installedPath, depsPath);
+
+        InstalledPackages.Remove(package);
+        InstalledDepPackages.Add(package);
+    }
+
+    private void MoveDepToInstalledPackage(InstalledPackage package)
+    {
+        if (!InstalledDepPackages.Contains(package))
+            throw new Exception($"InstalledDepPackages not have {package.VersionCatalog.Id}");
+
+
+        var installedPath = Path.Combine(GetNugetInstalledPackagesDir(), $"{package.VersionCatalog.Id}@{package.VersionCatalog.Version}");
+
+        var depsPath = Path.Combine(GetNugetInstalledDepDir(), $"{package.VersionCatalog.Id}@{package.VersionCatalog.Version}");
+
+        MoveDir(depsPath, installedPath);
+
+        InstalledDepPackages.Remove(package);
+        InstalledPackages.Add(package);
+    }
+
+    private void RemoveInstalledPackage(InstalledPackage package)
+    {
+        var installedPath = Path.Combine(GetNugetInstalledPackagesDir(), $"{package.VersionCatalog.Id}@{package.VersionCatalog.Version}");
+
+        RemoveUnityDir(installedPath);
+
+        InstalledPackages.Remove(package);
+    }
+
+    private void ProcessingRemovedPackage(InstalledPackage package)
+    {
+        List<NugetRegistrationCatalogDepedencyModel> deps = new List<NugetRegistrationCatalogDepedencyModel>();
+
+        LoadPackageDeps(package, deps);
+
+        foreach (var dep in deps)
+        {
+            var idep = GetInstalledDepPackage(dep.Name);
+
+            if (idep == null)
+                continue;
+
+            if (CheckPackageNeedAsDep(idep, deps))
+                continue;
+
+            var depsPath = Path.Combine(GetNugetInstalledDepDir(), $"{idep.VersionCatalog.Id}@{idep.VersionCatalog.Version}");
+
+            RemoveUnityDir(depsPath);
+
+            InstalledDepPackages.Remove(idep);
+        }
+    }
+
+    private bool CheckPackageNeedAsDep(InstalledPackage dep, List<NugetRegistrationCatalogDepedencyModel> ignoreDeps = null)
+    {
+        return InstalledPackages.Exists(x => x.SelectedFrameworkDeps.Dependencies.Any(z => z.Name == dep.VersionCatalog.Id)) ||
+            InstalledDepPackages.Exists(x => (ignoreDeps == null || !ignoreDeps.Exists(z => z.Name == x.VersionCatalog.Id)) && x.SelectedFrameworkDeps.Dependencies.Any(z => z.Name == dep.VersionCatalog.Id));
+    }
+
+    private bool? CheckPackageHandmadeCompatible(NugetRegistrationCatalogEntryModel catalog)
+    {
+        var hm = handmadeInstalled.FirstOrDefault(x => x.Package == catalog.Id);
+
+        if (hm == null)
+            return null;
+
+        return catalog.Version == hm.Version;
     }
 
     private string GetNewPackageTempDir()
