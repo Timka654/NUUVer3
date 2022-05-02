@@ -32,7 +32,7 @@ internal class NugetV3Local
 
     private const string DepsInstalledSubDir = "InstalledDep";
 
-    private string GetNugetDir() => Path.Combine(Application.dataPath, "..", "PackagesSubDir");
+    private string GetNugetDir() => Path.Combine(Application.dataPath, "..", "Packages", "Nuget");
 
     private string GetNugetInstalledDir() => Path.Combine(Application.dataPath, settings.RelativePackagePath);
 
