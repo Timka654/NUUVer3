@@ -59,11 +59,10 @@ public class NugetV3Window : EditorWindow
 
         LocalNuget.InitializeNuGet();
 
-        CurrentTab = NugetV3TabEnum.Browse;
-
-        OnChangeTab(CurrentTab, CurrentTab);
-
-        OnRefreshButtonClick();
+        if (CurrentTab < NugetV3TabEnum.Settings)
+        {
+            OnChangeTab(CurrentTab, CurrentTab);
+        }
     }
 
     RepositoryPackageViewModel selectedPackage
@@ -89,14 +88,20 @@ public class NugetV3Window : EditorWindow
 
     private void OnRefreshButtonClick()
     {
+        Refresh();
+    }
+
+    public void Refresh()
+    {
+
         refreshState = true;
 
         packageListBodyScroll = Vector2.zero;
 
-
+        SelectedPackageTabMap[CurrentTab] = null;
         PackageListTabMap[CurrentTab].Clear();
 
-        LocalNuget.Query(latestSearchContent, true);
+        LocalNuget.QueryAsync(CurrentTab, latestSearchContent, true);
     }
 
     internal void UpdateEditableRepositories(List<NugetRepositorySource> nugetRepositorySources)
@@ -147,7 +152,7 @@ public class NugetV3Window : EditorWindow
 
     private void OnMoreButtonClick()
     {
-        LocalNuget.Query(latestSearchContent);
+        LocalNuget.QueryAsync(CurrentTab, latestSearchContent);
     }
 
     public void OnInstallUninstallButtonClick(RepositoryPackageViewModel package)
@@ -591,6 +596,16 @@ public class NugetV3Window : EditorWindow
     internal void SetBrowsePackageViewList(List<RepositoryPackageViewModel> newPackageList)
     {
         PackageListTabMap[NugetV3TabEnum.Browse] = newPackageList;
+    }
+
+    internal void SetInstalledPackageViewList(List<RepositoryPackageViewModel> newPackageList)
+    {
+        PackageListTabMap[NugetV3TabEnum.Installed] = newPackageList;
+    }
+
+    internal void UpdateTabTitle(NugetV3TabEnum tab, string title)
+    {
+        GUITabButtons[(int)tab].text = title;
     }
 
     #endregion

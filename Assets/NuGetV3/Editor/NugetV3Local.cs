@@ -28,10 +28,87 @@ using UnityEditor.Sprites;
 using UnityEngine;
 using NUtils = NugetV3Utils;
 
-internal class NugetV3Local
+internal abstract class INugetQueryProcessor
+{
+    protected readonly NugetV3Window window;
+    protected readonly NugetV3Local local;
+
+    public INugetQueryProcessor(NugetV3Window window, NugetV3Local local)
+    {
+        this.window = window;
+        this.local = local;
+    }
+
+    public abstract void Query(CancellationToken cancellation, string query, bool clear = false);
+}
+
+internal class NugetBrowseQueryProcessor : INugetQueryProcessor
 {
 
-    //private const string SupportedFramework = ".NETStandard2.0";
+    private Dictionary<string, RepositoryPackagesViewModel> nugetQueryMap = new Dictionary<string, RepositoryPackagesViewModel>();
+
+    public NugetBrowseQueryProcessor(NugetV3Window window, NugetV3Local local) : base(window, local)
+    {
+    }
+
+    public override void Query(CancellationToken cancellationToken, string query, bool clear = false)
+    {
+        if (clear)
+            nugetQueryMap.Clear();
+
+        local.GetIndexResourcesRequest(() =>
+        {
+            local.QueryRequest(query, 15, () =>
+            {
+                window.CancelRefreshProcessState();
+
+                List<RepositoryPackageViewModel> newPackageList = new List<RepositoryPackageViewModel>();
+
+                foreach (var item in nugetQueryMap)
+                {
+                    newPackageList.AddRange(item.Value.Packages);
+                }
+
+                window.SetBrowsePackageViewList(newPackageList);
+
+            }, nugetQueryMap, cancellationToken);
+        });
+    }
+}
+
+internal class NugetInstalledPackageRepository : INugetQueryProcessor
+{
+    public NugetInstalledPackageRepository(NugetV3Window window, NugetV3Local local) : base(window, local)
+    {
+    }
+
+    public override void Query(CancellationToken cancellation, string query, bool clear = false)
+    {
+        IEnumerable<InstalledPackageData> result = local.GetInstalledPackages();
+
+        if (string.IsNullOrWhiteSpace(query) == false)
+            result = result.Where(x => x.VersionCatalog.Id.Contains(query, StringComparison.OrdinalIgnoreCase));
+
+        window.SetInstalledPackageViewList(result
+            .Cast<RepositoryPackageViewModel>()
+            .ToList());
+
+        window.CancelRefreshProcessState();
+    }
+}
+
+//internal class NugetUpdatesPackageRepository : INugetQueryProcessor
+//{
+
+//    public override void Query(CancellationToken cancellation, string query, bool clear = false)
+//    {
+
+//    }
+//}
+
+internal class NugetV3Local
+{
+    private Dictionary<NugetV3TabEnum, INugetQueryProcessor> PackageRepositoryMap;
 
     private const string PackagesInstalledSubDir = "Installed";
 
@@ -52,6 +129,11 @@ internal class NugetV3Local
     public NugetV3Local(NugetV3Window nugetV3Window)
     {
         this.window = nugetV3Window;
+        PackageRepositoryMap = new Dictionary<NugetV3TabEnum, INugetQueryProcessor>()
+        {
+            { NugetV3TabEnum.Browse, new NugetBrowseQueryProcessor(window,this) },
+            { NugetV3TabEnum.Installed, new NugetInstalledPackageRepository(window,this) }
+        };
     }
 
     #region Handle
@@ -90,71 +172,64 @@ internal class NugetV3Local
         }
 
         var token = details_cts.Token;
-
-        PackageVersionsRequestAsync(package.Package.Id, (versions) =>
+        GetIndexResourcesRequest(() =>
         {
-            if (!versions.Any())
-                return;
-
-            PackageRegistrationRequestAsync(package, () =>
+            PackageVersionsRequestAsync(package.Package.Id, (versions) =>
             {
-                if (package.Registration.Items.Any() == false)
+                if (!versions.Any())
                     return;
 
-                package.Versions = versions.SelectMany(x => x.Item2).Distinct().Reverse().ToList();
-                package.VersionsReceived = DateTime.UtcNow;
-
-                var selectedVersion = package.Versions.Last();
-
-                foreach (var regPage in package.Registration.Items)
+                PackageRegistrationRequestAsync(package, () =>
                 {
-                    foreach (var reg in regPage.Items)
-                    {
-                        if (reg.CatalogEntry.DependencyGroups == null)
-                            reg.CatalogEntry.DependencyGroups = new List<NugetRegistrationCatalogDepedencyGroupModel>();
+                    if (package.Registration.Items.Any() == false)
+                        return;
 
-                        foreach (var group in reg.CatalogEntry.DependencyGroups)
+                    package.Versions = versions.SelectMany(x => x.Item2).Distinct().Reverse().ToList();
+                    package.VersionsReceived = DateTime.UtcNow;
+
+                    foreach (var regPage in package.Registration.Items)
+                    {
+                        foreach (var reg in regPage.Items)
                         {
-                            if (group.Dependencies == null)
-                                group.Dependencies = new List<NugetRegistrationCatalogDepedencyModel>();
+                            if (reg.CatalogEntry.DependencyGroups == null)
+                                reg.CatalogEntry.DependencyGroups = new List<NugetRegistrationCatalogDepedencyGroupModel>();
+
+                            foreach (var group in reg.CatalogEntry.DependencyGroups)
+                            {
+                                if (group.Dependencies == null)
+                                    group.Dependencies = new List<NugetRegistrationCatalogDepedencyModel>();
+                            }
                         }
                     }
-                }
 
-                window.SetPackageDetails(tab, package);
+                    window.SetPackageDetails(tab, package);
+                }, token);
+
             }, token);
-
-        }, token);
+        });
     }
 
-    public void Query(string query, bool clear = false)
+    public void QueryAsync(NugetV3TabEnum tab, string query, bool clear = false)
     {
-        if (clear)
-            nugetQueryMap.Clear();
-
         refresh_cts.Cancel();
 
         refresh_cts = new CancellationTokenSource();
 
         var token = refresh_cts.Token;
 
-        GetIndexResourcesRequest(() =>
+        QueryTab(tab, query, token, clear);
+    }
+
+    private void QueryTab(NugetV3TabEnum tab, string query, CancellationToken token, bool clear = false)
+    {
+        if (!PackageRepositoryMap.TryGetValue(tab, out var processor))
         {
-            QueryRequest(query, 75, () =>
-            {
-                window.CancelRefreshProcessState();
+            window.CancelRefreshProcessState();
 
-                List<RepositoryPackageViewModel> newPackageList = new List<RepositoryPackageViewModel>();
+            return;
+        }
 
-                foreach (var item in nugetQueryMap)
-                {
-                    newPackageList.AddRange(item.Value.Packages);
-                }
-
-                window.SetBrowsePackageViewList(newPackageList);
-
-            }, token);
-        });
+        processor.Query(token, query, clear);
     }
 
     public async void OnInstallUninstallButtonClick(RepositoryPackageViewModel package)
@@ -188,8 +263,6 @@ internal class NugetV3Local
 
     private Dictionary<string, NugetIndexResponseModel> nuGetIndexMap = new Dictionary<string, NugetIndexResponseModel>();
 
-    private Dictionary<string, RepositoryPackagesViewModel> nugetQueryMap = new Dictionary<string, RepositoryPackagesViewModel>();
-
     private void SerializeRepositoryes() => File.WriteAllText(Path.Combine(GetNugetDir(), "Sources.json"), JsonSerializer.Serialize(repositories, NUtils.JsonOptions));
 
     private void SerializeHandmadeInstalled() => File.WriteAllText(Path.Combine(GetNugetDir(), "HandmadeInstalled.json"), JsonSerializer.Serialize(handmadeInstalled, NUtils.JsonOptions));
@@ -200,6 +273,10 @@ internal class NugetV3Local
     {
         LoadInstalledPackages();
         LoadInstalledDepedency();
+
+        UpdateInstalledTab();
+
+        UpdateInstalledTab();
     }
 
     private List<InstalledPackageData> LoadPackageCatalog(string catalog)
@@ -212,11 +289,28 @@ internal class NugetV3Local
         {
             foreach (var item in di.GetFiles("catalog.json", SearchOption.AllDirectories))
             {
-                result.Add(JsonSerializer.Deserialize<InstalledPackageData>(File.ReadAllText(item.FullName)));
+                var package = JsonSerializer.Deserialize<InstalledPackageData>(File.ReadAllText(item.FullName));
+
+                LoadPackageFromCatalog(package);
+
+                result.Add(package);
             }
         }
 
         return result;
+    }
+
+    private void LoadPackageFromCatalog(InstalledPackageData package)
+    {
+        package.Package = new NugetQueryPackageModel()
+        {
+            Id = package.VersionCatalog.Id,
+            Version = package.VersionCatalog.Version,
+            Description = ShrinkDescription(package.VersionCatalog.Description),
+            Authors = package.VersionCatalog.Authors.Split(" ")
+        };
+
+        package.SelectedVersion = package.VersionCatalog.Version;
     }
 
     private void LoadInstalledPackages()
@@ -292,6 +386,10 @@ internal class NugetV3Local
         InitializeNuGetDir();
 
         LoadInstalled();
+
+        QueryTab(NugetV3TabEnum.Browse, "", CancellationToken.None, true);
+        QueryTab(NugetV3TabEnum.Installed, "", CancellationToken.None, true);
+        QueryTab(NugetV3TabEnum.Update, "", CancellationToken.None, true);
     }
 
     #endregion
@@ -300,7 +398,7 @@ internal class NugetV3Local
 
     private SemaphoreSlim threadOperationLocker = new SemaphoreSlim(1);
 
-    private async void GetIndexResourcesRequest(Action onFinished = null)
+    public async void GetIndexResourcesRequest(Action onFinished = null)
     {
         if (!repositories.Any())
         {
@@ -358,7 +456,7 @@ internal class NugetV3Local
 
     }
 
-    private async void QueryRequest(string query, int? take, Action onFinished, CancellationToken cancellationToken)
+    public async void QueryRequest(string query, int? take, Action onFinished, Dictionary<string, RepositoryPackagesViewModel> nugetQueryMap, CancellationToken cancellationToken)
     {
         try { await threadOperationLocker.WaitAsync(cancellationToken); } catch { return; }
 
@@ -421,6 +519,11 @@ internal class NugetV3Local
 
                         exists.TotalHits = entry.TotalHits;
 
+                        foreach (var newPackage in entry.Data)
+                        {
+                            newPackage.Description = ShrinkDescription(newPackage.Description);
+                        }
+
                         exists.Packages.AddRange(entry.Data.Select(x => new RepositoryPackageViewModel() { Package = x }));
                     }
                 }
@@ -441,13 +544,13 @@ internal class NugetV3Local
             onFinished();
     }
 
-    private async void PackageRegistrationRequestAsync(PackageInstallProcessData package, Action onFinished, CancellationToken cancellationToken)
+    public async void PackageRegistrationRequestAsync(PackageInstallProcessData package, Action onFinished, CancellationToken cancellationToken)
         => await PackageRegistrationRequest(package.Package, onFinished, cancellationToken);
 
-    private async void PackageRegistrationRequestAsync(RepositoryPackageViewModel package, Action onFinished, CancellationToken cancellationToken)
+    public async void PackageRegistrationRequestAsync(RepositoryPackageViewModel package, Action onFinished, CancellationToken cancellationToken)
         => await PackageRegistrationRequest(package, onFinished, cancellationToken);
 
-    private async Task PackageRegistrationRequest(RepositoryPackageViewModel package, Action onFinished, CancellationToken cancellationToken)
+    public async Task PackageRegistrationRequest(RepositoryPackageViewModel package, Action onFinished, CancellationToken cancellationToken)
     {
         try { await threadOperationLocker.WaitAsync(cancellationToken); } catch { return; }
 
@@ -502,10 +605,10 @@ internal class NugetV3Local
             onFinished();
     }
 
-    private async void PackageVersionsRequestAsync(string name, Action<List<(string, string[])>> onSuccess, CancellationToken cancellationToken)
+    public async void PackageVersionsRequestAsync(string name, Action<List<(string, string[])>> onSuccess, CancellationToken cancellationToken)
         => await PackageVersionsRequest(name, onSuccess, cancellationToken);
 
-    private async Task PackageVersionsRequest(string name, Action<List<(string, string[])>> onSuccess, CancellationToken cancellationToken)
+    public async Task PackageVersionsRequest(string name, Action<List<(string, string[])>> onSuccess, CancellationToken cancellationToken)
     {
         try { await threadOperationLocker.WaitAsync(cancellationToken); } catch { return; }
 
@@ -559,7 +662,7 @@ internal class NugetV3Local
             onSuccess(result);
     }
 
-    private async Task<MemoryStream> DownloadRequest(string url)
+    public async Task<MemoryStream> DownloadRequest(string url)
     {
         await threadOperationLocker.WaitAsync();
 
@@ -728,6 +831,8 @@ internal class NugetV3Local
                 InstalledPackages.Add(process.InstalledPackage);
 
                 InstalledDepPackages.AddRange(process.InstallList.Select(x => x.InstalledPackage));
+
+                UpdateInstalledTab();
 
                 AssetDatabase.Refresh();
             }
@@ -1108,6 +1213,8 @@ internal class NugetV3Local
 
         InstalledPackages.Remove(package);
         InstalledDepPackages.Add(package);
+
+        UpdateInstalledTab();
     }
 
     private void MoveDepToInstalledPackage(InstalledPackageData package)
@@ -1124,6 +1231,8 @@ internal class NugetV3Local
 
         InstalledDepPackages.Remove(package);
         InstalledPackages.Add(package);
+
+        UpdateInstalledTab();
     }
 
     private void RemoveInstalledPackage(InstalledPackageData package)
@@ -1204,6 +1313,41 @@ internal class NugetV3Local
             File.Delete(path);
     }
 
+    private string ShrinkDescription(string description)
+    {
+        return description.Split('\n')[0].Trim();
+    }
+
+    public void UpdateInstalledTab()
+    {
+        if (!InstalledPackages.Any())
+        {
+            window.UpdateTabTitle(NugetV3TabEnum.Installed, "Installed");
+            return;
+        }
+
+        window.UpdateTabTitle(NugetV3TabEnum.Installed, $"Installed - {InstalledPackages.Count}");
+
+        window.Refresh();
+    }
+
+    public void UpdateUpdateTab()
+    {
+        if (!InstalledPackages.Any())
+        {
+            window.UpdateTabTitle(NugetV3TabEnum.Update, "Update");
+            return;
+        }
+
+        window.UpdateTabTitle(NugetV3TabEnum.Update, $"Update - {InstalledPackages.Count}");
+
+        window.Refresh();
+    }
+
+    public List<InstalledPackageData> GetInstalledPackages()
+    {
+        return InstalledPackages;
+    }
 }
 
 #endif
