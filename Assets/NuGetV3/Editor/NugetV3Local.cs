@@ -464,6 +464,13 @@ namespace NuGetV3
 
                     AssetDatabase.Refresh();
                 }
+                else
+                {
+                    foreach (var item in process.ProcessExceptions)
+                    {
+                        NUtils.LogError(settings, item);
+                    }
+                }
             }
             catch (Exception ex)
             {
