@@ -1,0 +1,51 @@
+{
+  "InstalledVersionCatalog": {
+    "@id": null,
+    "Authors": "Relife87",
+    "DependencyGroups": [
+      {
+        "@id": null,
+        "TargetFramework": ".NETStandard2.0",
+        "Dependencies": [
+          {
+            "@id": null,
+            "id": "Newtonsoft.Json",
+            "Range": "[13.0.1, )",
+            "Registration": "http://nuget.twicepricegroup.com/api/Package/94708437-6e0c-4a85-a8d2-f808a3947fb0-bf74b521-e71c-4d8e-97fa-e7fc5998255f-f12b95b5-0618-41d4-a4f5-d898d8b2ebc8/v3/registration3/newtonsoft.json/index.json"
+          }
+        ]
+      }
+    ],
+    "Description": "Package Description",
+    "IconUrl": null,
+    "Id": "Unity.NSL.Utils",
+    "Launguage": null,
+    "LicenseUrl": null,
+    "Listed": true,
+    "MinClientVersion": null,
+    "packageContent": "http://nuget.twicepricegroup.com/api/Package/94708437-6e0c-4a85-a8d2-f808a3947fb0-bf74b521-e71c-4d8e-97fa-e7fc5998255f-f12b95b5-0618-41d4-a4f5-d898d8b2ebc8/v3-flatcontainer/Unity.NSL.Utils/2022.5.5.1212/Unity.NSL.Utils.2022.5.5.1212.nupkg",
+    "ProjectUrl": null,
+    "Published": "2022-05-05T09:13:38.711372Z",
+    "RequireLicenseAcceptance": false,
+    "Summary": null,
+    "Tags": [
+      ""
+    ],
+    "Title": null,
+    "Version": "2022.5.5.1212",
+    "Vulnerabilities": null
+  },
+  "SelectedFrameworkDeps": {
+    "@id": null,
+    "TargetFramework": ".NETStandard2.0",
+    "Dependencies": [
+      {
+        "@id": null,
+        "id": "Newtonsoft.Json",
+        "Range": "[13.0.1, )",
+        "Registration": "http://nuget.twicepricegroup.com/api/Package/94708437-6e0c-4a85-a8d2-f808a3947fb0-bf74b521-e71c-4d8e-97fa-e7fc5998255f-f12b95b5-0618-41d4-a4f5-d898d8b2ebc8/v3/registration3/newtonsoft.json/index.json"
+      }
+    ]
+  },
+  "SelectedVersion": "2022.5.5.1212"
+}

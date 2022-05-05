@@ -460,6 +460,7 @@ namespace NuGetV3
                 else if (await LoadPackage(process) && await BuildTempDir(process) && await ProcessInstallPackage(process))
                 {
                     UpdateInstalledTab();
+                    UpdateUpdateTab();
 
                     AssetDatabase.Refresh();
                 }
@@ -540,6 +541,12 @@ namespace NuGetV3
             MoveDir(process.BuildDir, installDir.FullName);
 
 
+            foreach (var item in process.RemovePackageList)
+            {
+                DeletePackage(item);
+            }
+
+
             InstalledPackages.Add(process.InstalledPackage);
 
             InstalledDepPackages.AddRange(process.InstallList.Select(x => x.InstalledPackage));
@@ -616,6 +623,9 @@ namespace NuGetV3
 
                 return false;
             }
+
+            if (!await CheckPackageDeps(package, package))
+                return false;
 
             bool validFound = false;
 
@@ -789,6 +799,15 @@ namespace NuGetV3
                     continue;
                 }
 
+                dep.Package.SelectedVersionCatalog = depCatalog.CatalogEntry;
+                dep.Package.SelectedVersion = dep.Package.SelectedVersionCatalog.Version;
+
+                if (dep.SelectedFrameworkDeps.Dependencies == null)
+                    dep.SelectedFrameworkDeps.Dependencies = new List<NugetRegistrationCatalogDepedencyModel>();
+
+                if (!await CheckPackageDeps(mainPackage, dep))
+                    continue;
+
                 var hmResult = CheckPackageHandmadeCompatible(depCatalog.CatalogEntry);
 
                 if (!hmResult.HasValue)
@@ -797,12 +816,6 @@ namespace NuGetV3
                     continue;
                 else
                     return true;
-
-                dep.Package.SelectedVersionCatalog = depCatalog.CatalogEntry;
-                dep.Package.SelectedVersion = dep.Package.SelectedVersionCatalog.Version;
-
-                if (dep.SelectedFrameworkDeps.Dependencies == null)
-                    dep.SelectedFrameworkDeps.Dependencies = new List<NugetRegistrationCatalogDepedencyModel>();
 
                 if (dep.SelectedFrameworkDeps.Dependencies.Any())
                 {
@@ -813,6 +826,39 @@ namespace NuGetV3
             }
 
             return false;
+        }
+
+        private Task<bool> CheckPackageDeps(PackageInstallProcessData mainPackage, PackageInstallProcessData package)
+        {
+            var ipackage = GetInstalledPackage(package.Package.Package.Id);
+
+            if (ipackage != null && ipackage.SelectedVersion != package.Version)
+                return Task.FromResult(false);
+
+            ipackage = GetInstalledDepPackage(package.Package.Package.Id);
+
+            if (ipackage == null || ipackage.InstalledVersionCatalog.Version == package.Package.SelectedVersion)
+                return Task.FromResult(true);
+
+            var needDeps = new List<InstalledPackageData>(InstalledPackages);
+
+            needDeps.AddRange(InstalledDepPackages);
+            needDeps.AddRange(mainPackage.InstallList.Where(x => x.InstalledPackage != null).Select(x => x.InstalledPackage));
+
+            var exDeps = needDeps.SelectMany(x => x.SelectedFrameworkDeps.Dependencies.Where(x => x.Name.Equals(package.Package.Package.Id))).ToArray();
+
+            var dver = NuGetVersion.Parse(package.Version);
+
+            foreach (var item in exDeps)
+            {
+                if (!VersionRange.Parse(item.Range).Satisfies(dver))
+                    return Task.FromResult(false);
+
+            }
+
+            mainPackage.RemovePackageList.Add(ipackage);
+
+            return Task.FromResult(true);
         }
 
         private Task RemovePackage(InstalledPackageData ex)
@@ -889,11 +935,20 @@ namespace NuGetV3
 
         private void RemoveInstalledPackage(InstalledPackageData package)
         {
-            var installedPath = Path.Combine(GetNugetInstalledPackagesDir(), $"{package.SelectedVersionCatalog.Id}@{package.SelectedVersionCatalog.Version}");
+            var installedPath = Path.Combine(GetNugetInstalledPackagesDir(), $"{package.InstalledVersionCatalog.Id}@{package.InstalledVersionCatalog.Version}");
 
             RemoveUnityDir(installedPath);
 
             InstalledPackages.Remove(package);
+        }
+
+        private void RemoveInstalledDepPackage(InstalledPackageData package)
+        {
+            var installedPath = Path.Combine(GetNugetInstalledDepDir(), $"{package.InstalledVersionCatalog.Id}@{package.InstalledVersionCatalog.Version}");
+
+            RemoveUnityDir(installedPath);
+
+            InstalledDepPackages.Remove(package);
         }
 
         private void ProcessingRemovedPackage(InstalledPackageData package)
@@ -912,11 +967,7 @@ namespace NuGetV3
                 if (CheckPackageNeedAsDep(idep, deps))
                     continue;
 
-                var depsPath = Path.Combine(GetNugetInstalledDepDir(), $"{idep.SelectedVersionCatalog.Id}@{idep.SelectedVersionCatalog.Version}");
-
-                RemoveUnityDir(depsPath);
-
-                InstalledDepPackages.Remove(idep);
+                RemoveInstalledDepPackage(idep);
             }
         }
 
@@ -1014,6 +1065,18 @@ namespace NuGetV3
                 package.SelectedVersion = package.SelectedVersionCatalog.Version;
             }
             package.VersionsReceived = DateTime.UtcNow;
+        }
+
+        public void DeletePackage(InstalledPackageData package)
+        {
+            if (InstalledPackages.Contains(package))
+            {
+                RemoveInstalledPackage(package);
+            }
+            else
+            {
+                RemoveInstalledDepPackage(package);
+            }
         }
     }
 }

@@ -36,12 +36,12 @@ namespace NuGetV3
         { NugetV3TabEnum.Update, default },
     };
 
-        private readonly Dictionary<NugetV3TabEnum, string> SearchTextTabMap = new Dictionary<NugetV3TabEnum, string>()
-    {
-        { NugetV3TabEnum.Browse, "" },
-        { NugetV3TabEnum.Installed, "" },
-        { NugetV3TabEnum.Update, "" },
-    };
+        private readonly Dictionary<NugetV3TabEnum, SearchTabContent> SearchTextTabMap = new Dictionary<NugetV3TabEnum, SearchTabContent>()
+        {
+            { NugetV3TabEnum.Browse, new SearchTabContent ("","") },
+            { NugetV3TabEnum.Installed, new SearchTabContent ("","") },
+            { NugetV3TabEnum.Update, new SearchTabContent ("","") },
+        };
 
         #region MenuItems
 
@@ -72,7 +72,11 @@ namespace NuGetV3
             get => SelectedPackageTabMap[CurrentTab];
         }
 
-        private string latestSearchContent;
+        private string latestSearchContent
+        {
+            get => SearchTextTabMap[CurrentTab].Searched;
+            set { SearchTextTabMap[CurrentTab].Searched = value; }
+        }
 
         private NugetV3Local LocalNuget;
 
@@ -123,9 +127,9 @@ namespace NuGetV3
             if (newTab >= NugetV3TabEnum.Settings && newTab >= NugetV3TabEnum.Settings)
                 return;
 
-            SearchTextTabMap[oldTab] = SearchInputText;
+            SearchTextTabMap[oldTab].New = SearchInputText;
             ClearSearchInput();
-            SearchInputText = SearchTextTabMap[newTab];
+            SearchInputText = SearchTextTabMap[newTab].New;
         }
 
         private void OnSettingsSaveButtonClick()
@@ -529,7 +533,7 @@ namespace NuGetV3
                                         && ipd.HasUpdates
                                         && ipd.SelectedVersion != ipd.InstalledVersionCatalog.Version
                                         && GUILayout.Button("Update", GUILayout.Width(90)))
-                                            OnInstallUninstallButtonClick(selectedPackage);
+                                            OnUpdateButtonClick(selectedPackage);
 
                                         if (GUILayout.Button(LocalNuget.HasInstalledPackage(selectedPackage.Package.Id) ? "Remove" : "Install", GUILayout.Width(90)))
                                             OnInstallUninstallButtonClick(selectedPackage);
@@ -646,6 +650,18 @@ namespace NuGetV3
 
         #endregion
     }
+}
+
+public class SearchTabContent
+{
+    public SearchTabContent(string searched, string _new)
+    {
+        Searched = searched;
+        New = _new;
+    }
+
+    public string Searched { get; set; }
+    public string New { get; set; }
 }
 
 #endif
