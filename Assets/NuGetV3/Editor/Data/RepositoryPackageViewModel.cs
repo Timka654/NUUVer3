@@ -20,7 +20,7 @@ namespace NuGetV3.Data
 
         public List<NuGetVersion> Versions { get; private set; }
 
-        public NuGetVersion SelectedVersion => NuGetVersion.Parse(SelectedVersionCatalog.Version);
+        public NuGetVersion SelectedVersion => NuGetVersion.Parse(SelectedVersionCatalog?.Version);
 
         public DateTime? VersionsReceived { get; set; }
 
@@ -35,7 +35,7 @@ namespace NuGetV3.Data
 
         public virtual void SetPackageVersions(IEnumerable<NuGetVersion> versions)
         { 
-            Versions = versions.OrderByDescending(x => x).ToList();
+            Versions = versions.Where(x=>!x.IsPrerelease && !x.IsLegacyVersion).OrderByDescending(x => x).ToList();
 
             VersionsReceived = DateTime.UtcNow;
         }

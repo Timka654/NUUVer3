@@ -551,6 +551,11 @@ namespace NuGetV3
                                 GUILayout.Space(20);
                             });
 
+                            if (selectedPackage.SelectedVersionCatalog == null)
+                            {
+                                GUILayout.Label("Invalid package!!");
+                                return;
+                            }
                             GLayoutUtils.VerticalControlGroup(() =>
                             {
                                 GLayoutUtils.HorizontalControlGroup(() =>

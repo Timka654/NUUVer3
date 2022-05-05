@@ -108,6 +108,9 @@ namespace NuGetV3
 
                         foreach (var regPage in package.Registration.Items)
                         {
+                            if (regPage.Items == null)
+                                regPage.Items = new List<NugetRegistrationLeafModel>();
+
                             foreach (var reg in regPage.Items)
                             {
                                 if (reg.CatalogEntry.DependencyGroups == null)
@@ -608,7 +611,7 @@ namespace NuGetV3
                 return false;
             }
 
-            if (!await CheckPackageDeps(package, package))
+            if (await CheckPackageDeps(package, package) != CheckPackageDepsResultEnum.Compatible)
                 return false;
 
             bool validFound = false;
@@ -686,7 +689,7 @@ namespace NuGetV3
                             }
                         },
 
-                        InstalledPackage = GetInstalledDepPackage(dep.Name)
+                        InstalledPackage = GetInstalledPackage(dep.Name) ?? GetInstalledDepPackage(dep.Name)
                     };
 
                     await PackageVersionsRequest(pkg.RepositoryPackage, (updated, versions) =>
@@ -786,13 +789,18 @@ namespace NuGetV3
                 if (dep.SelectedFrameworkDeps.Dependencies == null)
                     dep.SelectedFrameworkDeps.Dependencies = new List<NugetRegistrationCatalogDepedencyModel>();
 
-                if (!await CheckPackageDeps(mainPackage, dep))
+                var checkResult = await CheckPackageDeps(mainPackage, dep);
+
+                if (checkResult == CheckPackageDepsResultEnum.Incompatible)
                     continue;
 
                 var hmResult = CheckPackageHandmadeCompatible(depCatalog.CatalogEntry);
 
                 if (!hmResult.HasValue)
-                    mainPackage.InstallList.Add(dep);
+                {
+                    if (checkResult != CheckPackageDepsResultEnum.AlreadyExists)
+                        mainPackage.InstallList.Add(dep);
+                }
                 else if (hmResult == false)
                     continue;
                 else
@@ -809,7 +817,14 @@ namespace NuGetV3
             return false;
         }
 
-        private Task<bool> CheckPackageDeps(PackageInstallProcessData mainPackage, PackageInstallProcessData package)
+        private enum CheckPackageDepsResultEnum
+        {
+            Compatible,
+            Incompatible,
+            AlreadyExists
+        }
+
+        private Task<CheckPackageDepsResultEnum> CheckPackageDeps(PackageInstallProcessData mainPackage, PackageInstallProcessData package)
         {
             var ipackage = GetInstalledPackage(package.PackageName);
 
@@ -817,19 +832,21 @@ namespace NuGetV3
             {
                 mainPackage.RemovePackageList.Add(ipackage);
 
-                return Task.FromResult(true);
+                return Task.FromResult(CheckPackageDepsResultEnum.Compatible);
             }
+            else if (ipackage != null && ipackage.InstalledVersion == package.SelectedVersion)
+                return Task.FromResult(CheckPackageDepsResultEnum.AlreadyExists);
             else if (ipackage != null)
             {
                 mainPackage.ProcessExceptions.Add(new ConflictPackageException($"Cannot change version for user manual installed depedency {package.PackageName}@{package.SelectedVersion}, first you need update {package.PackageName} to compatible versions or manual remove this", package));
 
-                return Task.FromResult(false);
+                return Task.FromResult(CheckPackageDepsResultEnum.Incompatible);
             }
 
             ipackage = GetInstalledDepPackage(package.PackageName);
 
             if (ipackage == null || ipackage.InstalledVersion == package.SelectedVersion)
-                return Task.FromResult(true);
+                return Task.FromResult(CheckPackageDepsResultEnum.AlreadyExists);
 
             var needDeps = new List<InstalledPackageData>(InstalledPackages);
 
@@ -848,14 +865,14 @@ namespace NuGetV3
                 {
                     mainPackage.ProcessExceptions.Add(new ConflictDepPackageException($"Depedency {package.PackageName}@{package.SelectedVersion} incompatible {tver} installed depedency", package));
 
-                    return Task.FromResult(false);
+                    return Task.FromResult(CheckPackageDepsResultEnum.Incompatible);
                 }
             }
 
             if (!mainPackage.RemovePackageList.Contains(ipackage))
                 mainPackage.RemovePackageList.Add(ipackage);
 
-            return Task.FromResult(true);
+            return Task.FromResult(CheckPackageDepsResultEnum.Compatible);
         }
 
         private Task RemovePackage(InstalledPackageData ex)
