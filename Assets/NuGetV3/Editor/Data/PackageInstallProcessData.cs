@@ -48,6 +48,8 @@ namespace NuGetV3.Data
         public InstalledPackageData InstalledPackage { get; set; }
 
         public List<InstalledPackageData> RemovePackageList { get; } = new List<InstalledPackageData>();
+
+        public List<Exception> ProcessExceptions { get; } = new List<Exception>();
     }
 }
 

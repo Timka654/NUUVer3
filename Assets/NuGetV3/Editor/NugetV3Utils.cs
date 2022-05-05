@@ -24,10 +24,12 @@ namespace NuGetV3
 
         internal static void LogError(NugetSettings settings, string message)
         {
-            if (!settings.ConsoleOutput)
-                return;
-
             Debug.LogError($"NUGET ERROR! {message}");
+        }
+
+        internal static void LogError(NugetSettings settings, Exception message)
+        {
+            LogError(settings, message.ToString());
         }
 
         internal static void LogInfo(NugetSettings settings, string message)
