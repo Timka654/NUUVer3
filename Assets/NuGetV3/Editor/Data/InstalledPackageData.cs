@@ -11,9 +11,14 @@ namespace NuGetV3.Data
 {
     public class InstalledPackageData : RepositoryPackageViewModel
     {
+        public NugetRegistrationCatalogEntryModel InstalledVersionCatalog { get; set; }
+
         public NugetRegistrationCatalogDepedencyGroupModel SelectedFrameworkDeps { get; set; }
 
         public string SelectedFramework => SelectedFrameworkDeps?.TargetFramework;
+
+        public override bool HasUpdates { get => base.HasUpdates; set => base.HasUpdates = value; }
+
     }
 }
 

@@ -15,7 +15,7 @@ namespace NuGetV3.Data
 
         public NugetRegistrationResponseModel Registration { get; set; }
 
-        public NugetRegistrationCatalogEntryModel VersionCatalog { get; set; }
+        public NugetRegistrationCatalogEntryModel SelectedVersionCatalog { get; set; }
 
         public List<string> Versions { get; set; }
 
@@ -24,6 +24,8 @@ namespace NuGetV3.Data
         public DateTime? VersionsReceived { get; set; }
 
         public InstalledPackageData Installed { get; set; }
+
+        public virtual bool HasUpdates { get; set; }
     }
 }
 

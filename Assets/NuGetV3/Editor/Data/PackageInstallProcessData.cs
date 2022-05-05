@@ -17,7 +17,7 @@ namespace NuGetV3.Data
 
         public NugetRegistrationResponseModel Registration => Package.Registration;
 
-        public NugetRegistrationCatalogEntryModel VersionCatalog => Package.VersionCatalog;
+        public NugetRegistrationCatalogEntryModel VersionCatalog => Package.SelectedVersionCatalog;
 
         public List<PackageInstallProcessData> DependecyList { get; } = new List<PackageInstallProcessData>();
 
