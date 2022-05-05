@@ -859,7 +859,8 @@ namespace NuGetV3
 
             }
 
-            mainPackage.RemovePackageList.Add(ipackage);
+            if (!mainPackage.RemovePackageList.Contains(ipackage))
+                mainPackage.RemovePackageList.Add(ipackage);
 
             return Task.FromResult(true);
         }

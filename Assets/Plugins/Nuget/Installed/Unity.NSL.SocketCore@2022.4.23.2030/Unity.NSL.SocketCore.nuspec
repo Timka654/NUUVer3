@@ -2,7 +2,7 @@
 <package xmlns="http://schemas.microsoft.com/packaging/2012/06/nuspec.xsd">
   <metadata>
     <id>Unity.NSL.SocketCore</id>
-    <version>2022.5.5.1212</version>
+    <version>2022.4.23.2030</version>
     <authors>Relife87</authors>
     <description>Библиотека содержащая базовые классы для взаимодействия по сетевому протоколу TCP</description>
     <requireLicenseAcceptance>false</requireLicenseAcceptance>
