@@ -104,7 +104,7 @@ namespace NuGetV3
                             return;
 
                         if (updated)
-                            ProcessPackageVersion(package, versions);
+                            package.SetPackageVersions(versions);
 
                         foreach (var regPage in package.Registration.Items)
                         {
@@ -227,8 +227,6 @@ namespace NuGetV3
                 {
                     var package = JsonSerializer.Deserialize<InstalledPackageData>(File.ReadAllText(item.FullName));
 
-                    package.SelectedVersionCatalog = package.InstalledVersionCatalog;
-
                     LoadPackageFromCatalog(package);
 
                     result.Add(package);
@@ -240,6 +238,8 @@ namespace NuGetV3
 
         private void LoadPackageFromCatalog(InstalledPackageData package)
         {
+            package.SelectedVersionCatalog = package.InstalledVersionCatalog;
+
             package.PackageQueryInfo = new NugetQueryPackageModel()
             {
                 Id = package.SelectedVersionCatalog.Id,
@@ -247,8 +247,6 @@ namespace NuGetV3
                 Description = ShrinkDescription(package.SelectedVersionCatalog.Description),
                 Authors = package.SelectedVersionCatalog.Authors.Split(" ")
             };
-
-            package.SelectedVersion = package.SelectedVersionCatalog.Version;
         }
 
         private void LoadInstalledPackages()
@@ -457,7 +455,7 @@ namespace NuGetV3
                 {
 
                 }
-                else if (await LoadPackage(process) && await BuildTempDir(process) && await ProcessInstallPackage(process))
+                else if (await BuildInstallPackageData(process) && await BuildTempDir(process) && await ProcessInstallPackage(process))
                 {
                     UpdateInstalledTab();
                     UpdateUpdateTab();
@@ -501,29 +499,6 @@ namespace NuGetV3
             }
 
             return false;
-        }
-
-        private void MoveDir(string sourceDir, string destDir)
-        {
-            var sourceDI = new DirectoryInfo(sourceDir);
-
-            foreach (var item in sourceDI.EnumerateFiles("*", SearchOption.AllDirectories))
-            {
-                var destFile = new FileInfo(Path.Combine(destDir, Path.GetRelativePath(sourceDI.FullName, item.FullName)));
-
-                if (destFile.Exists)
-                    destFile.Delete();
-
-                if (!destFile.Directory.Exists)
-                    destFile.Directory.Create();
-
-                item.MoveTo(destFile.FullName);
-            }
-
-            var meta = new FileInfo($"{sourceDI.FullName.TrimEnd('/').TrimEnd('\\')}.meta");
-
-            if (meta.Exists)
-                meta.Delete();
         }
 
         private async Task<bool> BuildTempDir(PackageInstallProcessData package)
@@ -590,11 +565,11 @@ namespace NuGetV3
 
                 processPackage.InstalledPackage = new InstalledPackageData
                 {
-                    SelectedVersionCatalog = processPackage.VersionCatalog,
                     InstalledVersionCatalog = processPackage.VersionCatalog,
-                    SelectedFrameworkDeps = processPackage.SelectedFrameworkDeps,
-                    SelectedVersion = processPackage.SelectedVersion
+                    SelectedFrameworkDeps = processPackage.SelectedFrameworkDeps
                 };
+
+                LoadPackageFromCatalog(processPackage.InstalledPackage);
 
                 File.WriteAllText(Path.Combine(packageDir, "catalog.json"), JsonSerializer.Serialize(new
                 {
@@ -614,7 +589,7 @@ namespace NuGetV3
             return false;
         }
 
-        private async Task<bool> LoadPackage(PackageInstallProcessData package)
+        private async Task<bool> BuildInstallPackageData(PackageInstallProcessData package)
         {
             var allowTarget = GetCompatibilityLevelInfo();
 
@@ -717,7 +692,7 @@ namespace NuGetV3
                     await PackageVersionsRequest(pkg.RepositoryPackage, (updated, versions) =>
                     {
                         if (updated)
-                            ProcessPackageVersion(pkg.RepositoryPackage, versions);
+                            pkg.RepositoryPackage.SetPackageVersions(versions);
                     }, CancellationToken.None);
 
                     PackageTemp.Add(pkg);
@@ -733,10 +708,8 @@ namespace NuGetV3
 
                 if (hmPackage == null || string.IsNullOrWhiteSpace(hmPackage.Version))
                 {
-                    foreach (var item in pkg.RepositoryPackage.Versions)
+                    foreach (var nuVer in pkg.RepositoryPackage.Versions)
                     {
-                        var nuVer = NuGetVersion.Parse(item);
-
                         if (!depVer.Satisfies(nuVer))
                         {
                             NUtils.LogDebug(settings, $"{dep.Name} - {depVer} no satisfies {nuVer}");
@@ -756,7 +729,7 @@ namespace NuGetV3
                     newVerList.Add(NuGetVersion.Parse(hmPackage.Version));
                 }
 
-                pkg.RepositoryPackage.Versions = newVerList.OrderByDescending(x => x).Select(x => x.ToString()).ToList();
+                pkg.RepositoryPackage.SetPackageVersions(newVerList);
 
                 result.Add(pkg);
             }
@@ -773,8 +746,8 @@ namespace NuGetV3
 
             var validItems = dep.Registration.Items
                 .SelectMany(x => x.Items)
-                .Where(x => dep.RepositoryPackage.Versions.Contains(x.CatalogEntry.Version))
-                .OrderBy(x => dep.RepositoryPackage.Versions.IndexOf(x.CatalogEntry.Version))
+                .Where(x => dep.RepositoryPackage.Versions.Contains(NuGetVersion.Parse(x.CatalogEntry.Version)))
+                .OrderBy(x => dep.RepositoryPackage.Versions.IndexOf(NuGetVersion.Parse(x.CatalogEntry.Version)))
                 .ToArray();
 
             foreach (var depCatalog in validItems)
@@ -809,7 +782,6 @@ namespace NuGetV3
                 }
 
                 dep.RepositoryPackage.SelectedVersionCatalog = depCatalog.CatalogEntry;
-                dep.RepositoryPackage.SelectedVersion = dep.RepositoryPackage.SelectedVersionCatalog.Version;
 
                 if (dep.SelectedFrameworkDeps.Dependencies == null)
                     dep.SelectedFrameworkDeps.Dependencies = new List<NugetRegistrationCatalogDepedencyModel>();
@@ -841,7 +813,7 @@ namespace NuGetV3
         {
             var ipackage = GetInstalledPackage(package.PackageName);
 
-            if (ipackage != null && ipackage.InstalledVersionCatalog.Version != package.SelectedVersion && mainPackage == package)
+            if (ipackage != null && ipackage.InstalledVersion != package.SelectedVersion && mainPackage == package)
             {
                 mainPackage.RemovePackageList.Add(ipackage);
 
@@ -849,14 +821,14 @@ namespace NuGetV3
             }
             else if (ipackage != null)
             {
-                mainPackage.ProcessExceptions.Add(new NotFoundValidPackageInfoException($"Cannot change version for user manual installed depedency {package.PackageName}@{package.SelectedVersion}, first you need update {package.PackageName} to compatible versions or manual remove this", package));
+                mainPackage.ProcessExceptions.Add(new ConflictPackageException($"Cannot change version for user manual installed depedency {package.PackageName}@{package.SelectedVersion}, first you need update {package.PackageName} to compatible versions or manual remove this", package));
 
                 return Task.FromResult(false);
             }
 
             ipackage = GetInstalledDepPackage(package.PackageName);
 
-            if (ipackage == null || ipackage.InstalledVersionCatalog.Version == package.RepositoryPackage.SelectedVersion)
+            if (ipackage == null || ipackage.InstalledVersion == package.SelectedVersion)
                 return Task.FromResult(true);
 
             var needDeps = new List<InstalledPackageData>(InstalledPackages);
@@ -866,17 +838,15 @@ namespace NuGetV3
 
             var exDeps = needDeps.SelectMany(x => x.SelectedFrameworkDeps.Dependencies.Where(x => x.Name.Equals(package.PackageName))).ToArray();
 
-            var dver = NuGetVersion.Parse(package.SelectedVersion);
-
             VersionRange tver;
 
             foreach (var item in exDeps)
             {
                 tver = VersionRange.Parse(item.Range);
 
-                if (!tver.Satisfies(dver))
+                if (!tver.Satisfies(package.SelectedVersion))
                 {
-                    mainPackage.ProcessExceptions.Add(new NotFoundValidPackageInfoException($"Depedency {package.PackageName}@{package.SelectedVersion} incompatible {tver} installed depedency", package));
+                    mainPackage.ProcessExceptions.Add(new ConflictDepPackageException($"Depedency {package.PackageName}@{package.SelectedVersion} incompatible {tver} installed depedency", package));
 
                     return Task.FromResult(false);
                 }
@@ -930,9 +900,9 @@ namespace NuGetV3
                 throw new Exception($"InstalledPackages not have {package.SelectedVersionCatalog.Id}");
 
 
-            var installedPath = Path.Combine(GetNugetInstalledPackagesDir(), $"{package.SelectedVersionCatalog.Id}@{package.SelectedVersionCatalog.Version}");
+            var installedPath = Path.Combine(GetNugetInstalledPackagesDir(), $"{package.Name}@{package.InstalledVersion}");
 
-            var depsPath = Path.Combine(GetNugetInstalledDepDir(), $"{package.SelectedVersionCatalog.Id}@{package.SelectedVersionCatalog.Version}");
+            var depsPath = Path.Combine(GetNugetInstalledDepDir(), $"{package.Name}@{package.InstalledVersion}");
 
             MoveDir(installedPath, depsPath);
 
@@ -1028,21 +998,6 @@ namespace NuGetV3
             return dir;
         }
 
-        private void RemoveUnityDir(string path)
-        {
-            path = path.TrimEnd('\\').TrimEnd('/');
-
-            if (!Directory.Exists(path))
-                return;
-
-            Directory.Delete(path, true);
-
-            path += ".meta";
-
-            if (File.Exists(path))
-                File.Delete(path);
-        }
-
         private string ShrinkDescription(string description)
         {
             return description.Split('\n')[0].Trim();
@@ -1063,7 +1018,7 @@ namespace NuGetV3
 
         public void UpdateUpdateTab()
         {
-            var updatesEnumerable = InstalledPackages.Where(x => x.Versions != null && x.Versions.IndexOf(x.SelectedVersionCatalog.Version) != 0);
+            var updatesEnumerable = InstalledPackages.Where(x => x.Versions != null && x.HasUpdates);
 
             if (!updatesEnumerable.Any())
             {
@@ -1081,18 +1036,6 @@ namespace NuGetV3
             return InstalledPackages;
         }
 
-        public void ProcessPackageVersion(RepositoryPackageViewModel package, List<string> versions)
-        {
-            package.Versions = versions.Distinct().Reverse().ToList();
-
-            if (package.SelectedVersionCatalog != null && package.Versions.Any())
-            {
-                package.HasUpdates = package.SelectedVersionCatalog.Version == package.Versions[0];
-
-                package.SelectedVersion = package.SelectedVersionCatalog.Version;
-            }
-            package.VersionsReceived = DateTime.UtcNow;
-        }
 
         public void DeletePackage(InstalledPackageData package)
         {
@@ -1105,6 +1048,48 @@ namespace NuGetV3
                 RemoveInstalledDepPackage(package);
             }
         }
+
+        #region IOUtils
+
+        private void MoveDir(string sourceDir, string destDir)
+        {
+            var sourceDI = new DirectoryInfo(sourceDir);
+
+            foreach (var item in sourceDI.EnumerateFiles("*", SearchOption.AllDirectories))
+            {
+                var destFile = new FileInfo(Path.Combine(destDir, Path.GetRelativePath(sourceDI.FullName, item.FullName)));
+
+                if (destFile.Exists)
+                    destFile.Delete();
+
+                if (!destFile.Directory.Exists)
+                    destFile.Directory.Create();
+
+                item.MoveTo(destFile.FullName);
+            }
+
+            var meta = new FileInfo($"{sourceDI.FullName.TrimEnd('/').TrimEnd('\\')}.meta");
+
+            if (meta.Exists)
+                meta.Delete();
+        }
+
+        private void RemoveUnityDir(string path)
+        {
+            path = path.TrimEnd('\\').TrimEnd('/');
+
+            if (!Directory.Exists(path))
+                return;
+
+            Directory.Delete(path, true);
+
+            path += ".meta";
+
+            if (File.Exists(path))
+                File.Delete(path);
+        }
+
+        #endregion
     }
 }
 

@@ -1,6 +1,7 @@
 ﻿#if UNITY_EDITOR
 
 using NU.Core.Models.Response;
+using NuGet.Versioning;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -13,11 +14,25 @@ namespace NuGetV3.Data
     {
         public NugetRegistrationCatalogEntryModel InstalledVersionCatalog { get; set; }
 
+        public NuGetVersion InstalledVersion => NuGetVersion.Parse(InstalledVersionCatalog?.Version);
+
         public NugetRegistrationCatalogDepedencyGroupModel SelectedFrameworkDeps { get; set; }
 
         public string SelectedFramework => SelectedFrameworkDeps?.TargetFramework;
 
         public override bool HasUpdates { get => base.HasUpdates; set => base.HasUpdates = value; }
+
+        public override void SetPackageVersions(IEnumerable<NuGetVersion> versions)
+        {
+            base.SetPackageVersions(versions);
+
+            if (InstalledVersionCatalog != null && Versions.Any())
+            {
+                SelectedVersionCatalog = InstalledVersionCatalog;
+
+                HasUpdates = InstalledVersion == Versions[0];
+            }
+        }
 
     }
 }

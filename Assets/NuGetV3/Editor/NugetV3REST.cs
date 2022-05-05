@@ -243,25 +243,25 @@ namespace NuGetV3
                 onFinished();
         }
 
-        public async void PackageVersionsRequestAsync(string name, Action<bool, List<string>> onSuccess, CancellationToken cancellationToken)
+        public async void PackageVersionsRequestAsync(string name, Action<bool, IEnumerable<string>> onSuccess, CancellationToken cancellationToken)
             => await PackageVersionsRequest(name, onSuccess, cancellationToken);
 
-        public async void PackageVersionsRequestAsync(RepositoryPackageViewModel package, Action<bool, List<string>> onSuccess, CancellationToken cancellationToken)
+        public async void PackageVersionsRequestAsync(RepositoryPackageViewModel package, Action<bool, IEnumerable<string>> onSuccess, CancellationToken cancellationToken)
             => await PackageVersionsRequest(package, onSuccess, cancellationToken);
 
-        public Task PackageVersionsRequest(RepositoryPackageViewModel package, Action<bool, List<string>> onSuccess, CancellationToken cancellationToken)
+        public Task PackageVersionsRequest(RepositoryPackageViewModel package, Action<bool, IEnumerable<string>> onSuccess, CancellationToken cancellationToken)
         {
             if (package.VersionsReceived.HasValue && package.VersionsReceived.Value.AddMinutes(10) > DateTime.UtcNow)
             {
 
-                onSuccess(false, package.Versions);
+                onSuccess(false, package.Versions.Select(x=>x.ToString()));
                 return Task.CompletedTask;
             }
 
             return PackageVersionsRequest(package.PackageQueryInfo.Id, onSuccess, cancellationToken);
         }
 
-        public async Task PackageVersionsRequest(string name, Action<bool, List<string>> onSuccess, CancellationToken cancellationToken)
+        public async Task PackageVersionsRequest(string name, Action<bool, IEnumerable<string>> onSuccess, CancellationToken cancellationToken)
         {
             try { await threadOperationLocker.WaitAsync(cancellationToken); } catch { return; }
 

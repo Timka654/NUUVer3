@@ -1,6 +1,7 @@
 ﻿#if UNITY_EDITOR
 
 using NU.Core.Models.Response;
+using NuGet.Versioning;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -13,7 +14,7 @@ namespace NuGetV3.Data
     {
         public RepositoryPackageViewModel RepositoryPackage { get; set; }
 
-        public string SelectedVersion => RepositoryPackage.SelectedVersion;
+        public NuGetVersion SelectedVersion => RepositoryPackage.SelectedVersion;
 
         public string PackageName => RepositoryPackage.PackageQueryInfo.Id;
 
@@ -31,16 +32,19 @@ namespace NuGetV3.Data
 
         public PackageInstallProcessData Clone()
         {
-            return new PackageInstallProcessData()
+            var clone = new PackageInstallProcessData()
             {
                 RepositoryPackage = new RepositoryPackageViewModel()
                 {
                     PackageQueryInfo = RepositoryPackage.PackageQueryInfo,
                     Registration = RepositoryPackage.Registration,
-                    Versions = new List<string>(RepositoryPackage.Versions)
-
                 }
             };
+
+            clone.RepositoryPackage.SetPackageVersions(RepositoryPackage.Versions);
+
+            return clone;
+
         }
 
         public List<PackageInstallProcessData> IgnoringPackageList { get; } = new List<PackageInstallProcessData>();

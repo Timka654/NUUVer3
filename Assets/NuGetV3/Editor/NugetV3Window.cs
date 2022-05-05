@@ -124,12 +124,13 @@ namespace NuGetV3
 
         private void OnChangeTab(NugetV3TabEnum newTab, NugetV3TabEnum oldTab)
         {
-            if (newTab >= NugetV3TabEnum.Settings && newTab >= NugetV3TabEnum.Settings)
-                return;
+            if (oldTab < NugetV3TabEnum.Settings)
+                SearchTextTabMap[oldTab].New = SearchInputText;
 
-            SearchTextTabMap[oldTab].New = SearchInputText;
             ClearSearchInput();
-            SearchInputText = SearchTextTabMap[newTab].New;
+
+            if (newTab < NugetV3TabEnum.Settings)
+                SearchInputText = SearchTextTabMap[newTab].New;
         }
 
         private void OnSettingsSaveButtonClick()
@@ -148,12 +149,10 @@ namespace NuGetV3
         private void OnSelectedPackageVersion(int newIdx, int oldIdx)
         {
             selectedVersionIdx = newIdx;
-            selectedPackage.SelectedVersion = selectedPackage.Versions[newIdx];
-
 
             selectedPackage.SelectedVersionCatalog = selectedPackage.Registration.Items
             .SelectMany(x => x.Items)
-            .FirstOrDefault(x => x.CatalogEntry.Version == selectedPackage.SelectedVersion)?.CatalogEntry;
+            .FirstOrDefault(x => x.CatalogEntry.Version == selectedPackage.Versions[selectedVersionIdx].ToString())?.CatalogEntry;
         }
 
         private void OnMoreButtonClick()
@@ -524,14 +523,13 @@ namespace NuGetV3
 
                                     GLayoutUtils.HorizontalControlGroup(() =>
                                     {
-                                        newSelectedVersionIdx = EditorGUILayout.Popup(selectedVersionIdx, selectedPackage.Versions.ToArray(), GUILayout.MaxWidth(240));
+                                        newSelectedVersionIdx = EditorGUILayout.Popup(selectedVersionIdx, selectedPackage.Versions.Select(x=>x.ToString()).ToArray(), GUILayout.MaxWidth(240));
 
                                         if (newSelectedVersionIdx != selectedVersionIdx)
                                             OnSelectedPackageVersion(newSelectedVersionIdx, selectedVersionIdx);
 
                                         if (selectedPackage is InstalledPackageData ipd
-                                        && ipd.HasUpdates
-                                        && ipd.SelectedVersion != ipd.InstalledVersionCatalog.Version
+                                        && ipd.SelectedVersion != ipd.InstalledVersion
                                         && GUILayout.Button("Update", GUILayout.Width(90)))
                                             OnUpdateButtonClick(selectedPackage);
 

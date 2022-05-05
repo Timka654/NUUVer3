@@ -96,16 +96,15 @@ namespace NuGetV3
             local.GetIndexResourcesRequestAsync(async () =>
             {
                 await Task.WhenAll(result
-                    .Where(x => x.Versions == null)
                     .Select(x => local.PackageVersionsRequest(x, (updated, result) =>
                     {
                         if (updated)
-                            local.ProcessPackageVersion(x, result);
+                            x.SetPackageVersions(result);
                     }, cancellationToken)).ToArray());
 
                 result = result
                     .Where(x => x.Versions != null)
-                    .Where(x => x.HasUpdates = x.Versions.IndexOf(x.SelectedVersionCatalog.Version) != 0);
+                    .Where(x => x.HasUpdates = x.Versions.IndexOf(x.InstalledVersion) != 0);
 
                 window.SetUpdatesPackageViewList(result
                     .Cast<RepositoryPackageViewModel>()

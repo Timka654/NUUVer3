@@ -3,3 +3,5 @@
 *.csproj.*
 /Library/
 /Temp/
+/Logs
+/obj
