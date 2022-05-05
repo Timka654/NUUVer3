@@ -832,9 +832,12 @@ namespace NuGetV3
         {
             var ipackage = GetInstalledPackage(package.Package.Package.Id);
 
-            if (ipackage != null && ipackage.SelectedVersion != package.Version)
-                return Task.FromResult(false);
+            if (ipackage != null && ipackage.InstalledVersionCatalog.Version != package.Version)
+            {
+                mainPackage.RemovePackageList.Add(ipackage);
 
+                return Task.FromResult(true);
+            }
             ipackage = GetInstalledDepPackage(package.Package.Package.Id);
 
             if (ipackage == null || ipackage.InstalledVersionCatalog.Version == package.Package.SelectedVersion)
