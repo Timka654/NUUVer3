@@ -162,7 +162,7 @@ namespace NuGetV3
                 return;
             }
 
-            var installed = GetInstalledPackage(package.Package.Id);
+            var installed = GetInstalledPackage(package.PackageQueryInfo.Id);
 
             if (installed != null)
                 await InstallPackage(package);
@@ -181,7 +181,7 @@ namespace NuGetV3
                 return;
             }
 
-            var installed = GetInstalledPackage(package.Package.Id);
+            var installed = GetInstalledPackage(package.PackageQueryInfo.Id);
 
             if (installed == null)
                 await InstallPackage(package);
@@ -240,7 +240,7 @@ namespace NuGetV3
 
         private void LoadPackageFromCatalog(InstalledPackageData package)
         {
-            package.Package = new NugetQueryPackageModel()
+            package.PackageQueryInfo = new NugetQueryPackageModel()
             {
                 Id = package.SelectedVersionCatalog.Id,
                 Version = package.SelectedVersionCatalog.Version,
@@ -446,14 +446,14 @@ namespace NuGetV3
         {
             var process = new PackageInstallProcessData()
             {
-                Package = package,
+                RepositoryPackage = package,
                 BuildDir = GetNewPackageTempDir(),
-                InstalledPackage = GetInstalledPackage(package.Package.Id)
+                InstalledPackage = GetInstalledPackage(package.PackageQueryInfo.Id)
             };
 
             try
             {
-                if (TryMoveDepToInstallPackage(process, GetInstalledDepPackage(package.Package.Id)))
+                if (TryMoveDepToInstallPackage(process, GetInstalledDepPackage(package.PackageQueryInfo.Id)))
                 {
 
                 }
@@ -470,6 +470,8 @@ namespace NuGetV3
                     {
                         NUtils.LogError(settings, item);
                     }
+
+                    NUtils.LogError(settings, $"Cannot install/update package {process.PackageName}! Fix errors and try again...");
                 }
             }
             catch (Exception ex)
@@ -486,7 +488,7 @@ namespace NuGetV3
         {
             if (dep != null)
             {
-                if (dep.SelectedVersion == process.Package.SelectedVersion)
+                if (dep.SelectedVersion == process.RepositoryPackage.SelectedVersion)
                 {
                     MoveDepToInstalledPackage(dep);
 
@@ -591,7 +593,7 @@ namespace NuGetV3
                     SelectedVersionCatalog = processPackage.VersionCatalog,
                     InstalledVersionCatalog = processPackage.VersionCatalog,
                     SelectedFrameworkDeps = processPackage.SelectedFrameworkDeps,
-                    SelectedVersion = processPackage.Version
+                    SelectedVersion = processPackage.SelectedVersion
                 };
 
                 File.WriteAllText(Path.Combine(packageDir, "catalog.json"), JsonSerializer.Serialize(new
@@ -626,7 +628,7 @@ namespace NuGetV3
 
             if (package.SelectedFrameworkDeps == null)
             {
-                NUtils.LogDebug(settings, $"Cannot find target for {string.Join(",", allowTarget.Select(x => $"{x.Name}@{x.Range}"))} for {package.VersionCatalog.Id}@{package.Version}");
+                NUtils.LogDebug(settings, $"Cannot find target for {string.Join(",", allowTarget.Select(x => $"{x.Name}@{x.Range}"))} for {package.VersionCatalog.Id}@{package.SelectedVersion}");
 
                 return false;
             }
@@ -682,7 +684,7 @@ namespace NuGetV3
             foreach (var item in newDepList)
             {
                 if (!await ProcessPackageDepedency(item, mainPackage))
-                    throw new InvalidPackageException($"Not Found valid deps in {item.Package.Package.Id} package in {processingPackage.Package.Package.Id}", processingPackage);
+                    throw new InvalidPackageException($"Not Found valid deps in {item.PackageName} package in {processingPackage.PackageName}", processingPackage);
             }
 
             return newDepList;
@@ -695,15 +697,15 @@ namespace NuGetV3
 
             foreach (var dep in processingPackage.SelectedFrameworkDeps.Dependencies)
             {
-                var pkg = PackageTemp.FirstOrDefault(x => x.Package.Package.Id.Equals(dep.Name, StringComparison.OrdinalIgnoreCase) == true);
+                var pkg = PackageTemp.FirstOrDefault(x => x.PackageName.Equals(dep.Name, StringComparison.OrdinalIgnoreCase) == true);
 
                 if (pkg == null)
                 {
                     pkg = new PackageInstallProcessData()
                     {
-                        Package = new RepositoryPackageViewModel()
+                        RepositoryPackage = new RepositoryPackageViewModel()
                         {
-                            Package = new NugetQueryPackageModel()
+                            PackageQueryInfo = new NugetQueryPackageModel()
                             {
                                 Id = dep.Name
                             }
@@ -712,10 +714,10 @@ namespace NuGetV3
                         InstalledPackage = GetInstalledDepPackage(dep.Name)
                     };
 
-                    await PackageVersionsRequest(pkg.Package, (updated, versions) =>
+                    await PackageVersionsRequest(pkg.RepositoryPackage, (updated, versions) =>
                     {
                         if (updated)
-                            ProcessPackageVersion(pkg.Package, versions);
+                            ProcessPackageVersion(pkg.RepositoryPackage, versions);
                     }, CancellationToken.None);
 
                     PackageTemp.Add(pkg);
@@ -727,11 +729,11 @@ namespace NuGetV3
 
                 var newVerList = new List<NuGetVersion>();
 
-                var hmPackage = handmadeInstalled.FirstOrDefault(x => x.Package.Equals(pkg.Package.Package.Id));
+                var hmPackage = handmadeInstalled.FirstOrDefault(x => x.Package.Equals(pkg.PackageName));
 
                 if (hmPackage == null || string.IsNullOrWhiteSpace(hmPackage.Version))
                 {
-                    foreach (var item in pkg.Package.Versions)
+                    foreach (var item in pkg.RepositoryPackage.Versions)
                     {
                         var nuVer = NuGetVersion.Parse(item);
 
@@ -754,7 +756,7 @@ namespace NuGetV3
                     newVerList.Add(NuGetVersion.Parse(hmPackage.Version));
                 }
 
-                pkg.Package.Versions = newVerList.OrderByDescending(x => x).Select(x => x.ToString()).ToList();
+                pkg.RepositoryPackage.Versions = newVerList.OrderByDescending(x => x).Select(x => x.ToString()).ToList();
 
                 result.Add(pkg);
             }
@@ -764,15 +766,15 @@ namespace NuGetV3
 
         private async Task<bool> ProcessPackageDepedency(PackageInstallProcessData dep, PackageInstallProcessData mainPackage)
         {
-            if (dep.Package.Registration == null)
-                await PackageRegistrationRequest(dep.Package, () => { }, CancellationToken.None);
+            if (dep.RepositoryPackage.Registration == null)
+                await PackageRegistrationRequest(dep.RepositoryPackage, () => { }, CancellationToken.None);
 
-            NUtils.LogDebug(settings, $"ProcessPackageDepedency {dep.Package.Package.Id}");
+            NUtils.LogDebug(settings, $"ProcessPackageDepedency {dep.PackageName}");
 
             var validItems = dep.Registration.Items
                 .SelectMany(x => x.Items)
-                .Where(x => dep.Package.Versions.Contains(x.CatalogEntry.Version))
-                .OrderBy(x => dep.Package.Versions.IndexOf(x.CatalogEntry.Version))
+                .Where(x => dep.RepositoryPackage.Versions.Contains(x.CatalogEntry.Version))
+                .OrderBy(x => dep.RepositoryPackage.Versions.IndexOf(x.CatalogEntry.Version))
                 .ToArray();
 
             foreach (var depCatalog in validItems)
@@ -782,7 +784,7 @@ namespace NuGetV3
 
                 var tfRange = OrderFramework.Skip(OrderFramework.IndexOf(mainPackage.SelectedFramework)).ToList();
 
-                dep.Package.SelectedVersionCatalog = depCatalog.CatalogEntry;
+                dep.RepositoryPackage.SelectedVersionCatalog = depCatalog.CatalogEntry;
 
                 var ta = depCatalog.CatalogEntry.DependencyGroups
                     .Where(x =>
@@ -806,8 +808,8 @@ namespace NuGetV3
                     continue;
                 }
 
-                dep.Package.SelectedVersionCatalog = depCatalog.CatalogEntry;
-                dep.Package.SelectedVersion = dep.Package.SelectedVersionCatalog.Version;
+                dep.RepositoryPackage.SelectedVersionCatalog = depCatalog.CatalogEntry;
+                dep.RepositoryPackage.SelectedVersion = dep.RepositoryPackage.SelectedVersionCatalog.Version;
 
                 if (dep.SelectedFrameworkDeps.Dependencies == null)
                     dep.SelectedFrameworkDeps.Dependencies = new List<NugetRegistrationCatalogDepedencyModel>();
@@ -837,20 +839,24 @@ namespace NuGetV3
 
         private Task<bool> CheckPackageDeps(PackageInstallProcessData mainPackage, PackageInstallProcessData package)
         {
-            var ipackage = GetInstalledPackage(package.Package.Package.Id);
+            var ipackage = GetInstalledPackage(package.PackageName);
 
-            if (ipackage != null && ipackage.InstalledVersionCatalog.Version != package.Version && mainPackage == package)
+            if (ipackage != null && ipackage.InstalledVersionCatalog.Version != package.SelectedVersion && mainPackage == package)
             {
                 mainPackage.RemovePackageList.Add(ipackage);
 
                 return Task.FromResult(true);
             }
             else if (ipackage != null)
+            {
+                mainPackage.ProcessExceptions.Add(new NotFoundValidPackageInfoException($"Cannot change version for user manual installed depedency {package.PackageName}@{package.SelectedVersion}, first you need update {package.PackageName} to compatible versions or manual remove this", package));
+
                 return Task.FromResult(false);
+            }
 
-            ipackage = GetInstalledDepPackage(package.Package.Package.Id);
+            ipackage = GetInstalledDepPackage(package.PackageName);
 
-            if (ipackage == null || ipackage.InstalledVersionCatalog.Version == package.Package.SelectedVersion)
+            if (ipackage == null || ipackage.InstalledVersionCatalog.Version == package.RepositoryPackage.SelectedVersion)
                 return Task.FromResult(true);
 
             var needDeps = new List<InstalledPackageData>(InstalledPackages);
@@ -858,15 +864,22 @@ namespace NuGetV3
             needDeps.AddRange(InstalledDepPackages);
             needDeps.AddRange(mainPackage.InstallList.Where(x => x.InstalledPackage != null).Select(x => x.InstalledPackage));
 
-            var exDeps = needDeps.SelectMany(x => x.SelectedFrameworkDeps.Dependencies.Where(x => x.Name.Equals(package.Package.Package.Id))).ToArray();
+            var exDeps = needDeps.SelectMany(x => x.SelectedFrameworkDeps.Dependencies.Where(x => x.Name.Equals(package.PackageName))).ToArray();
 
-            var dver = NuGetVersion.Parse(package.Version);
+            var dver = NuGetVersion.Parse(package.SelectedVersion);
+
+            VersionRange tver;
 
             foreach (var item in exDeps)
             {
-                if (!VersionRange.Parse(item.Range).Satisfies(dver))
-                    return Task.FromResult(false);
+                tver = VersionRange.Parse(item.Range);
 
+                if (!tver.Satisfies(dver))
+                {
+                    mainPackage.ProcessExceptions.Add(new NotFoundValidPackageInfoException($"Depedency {package.PackageName}@{package.SelectedVersion} incompatible {tver} installed depedency", package));
+
+                    return Task.FromResult(false);
+                }
             }
 
             if (!mainPackage.RemovePackageList.Contains(ipackage))

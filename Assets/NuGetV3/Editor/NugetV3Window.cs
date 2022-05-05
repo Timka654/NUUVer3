@@ -480,14 +480,14 @@ namespace NuGetV3
 
                 GLayoutUtils.HorizontalControlGroup(() =>
                 {
-                    GUILayout.Box(package.Package.Id, packageItemNameStyle);
-                    GUILayout.Box(package.Package.Authors[0], packageItemAvtorStyle);
+                    GUILayout.Box(package.PackageQueryInfo.Id, packageItemNameStyle);
+                    GUILayout.Box(package.PackageQueryInfo.Authors[0], packageItemAvtorStyle);
                 });
 
 
                 GLayoutUtils.HorizontalControlGroup(() =>
                 {
-                    GUILayout.Label(package.Package.Description, packageItemDescriptionStyle, GUILayout.MaxWidth(leftSideWidth - 200), GUILayout.MaxHeight(20), GUILayout.ExpandHeight(false));
+                    GUILayout.Label(package.PackageQueryInfo.Description, packageItemDescriptionStyle, GUILayout.MaxWidth(leftSideWidth - 200), GUILayout.MaxHeight(20), GUILayout.ExpandHeight(false));
                 });
 
                 GUILayout.Space(5);
@@ -498,7 +498,7 @@ namespace NuGetV3
         {
             GLayoutUtils.VerticalControlGroup(() =>
             {
-                GUILayout.Box(package.Package.Version, GUILayout.MinWidth(130));
+                GUILayout.Box(package.PackageQueryInfo.Version, GUILayout.MinWidth(130));
             });
         }
 
@@ -520,7 +520,7 @@ namespace NuGetV3
 
                             GLayoutUtils.VerticalControlGroup(() =>
                                 {
-                                    GUILayout.Box(selectedPackage.Package.Id, packageItemNameStyle);
+                                    GUILayout.Box(selectedPackage.PackageQueryInfo.Id, packageItemNameStyle);
 
                                     GLayoutUtils.HorizontalControlGroup(() =>
                                     {
@@ -535,7 +535,7 @@ namespace NuGetV3
                                         && GUILayout.Button("Update", GUILayout.Width(90)))
                                             OnUpdateButtonClick(selectedPackage);
 
-                                        if (GUILayout.Button(LocalNuget.HasInstalledPackage(selectedPackage.Package.Id) ? "Remove" : "Install", GUILayout.Width(90)))
+                                        if (GUILayout.Button(LocalNuget.HasInstalledPackage(selectedPackage.PackageQueryInfo.Id) ? "Remove" : "Install", GUILayout.Width(90)))
                                             OnInstallUninstallButtonClick(selectedPackage);
                                     });
                                 });
@@ -549,7 +549,7 @@ namespace NuGetV3
                             {
                                 GUILayout.Space(10);
                                 GUILayout.Label("Description", packageDetailsNameStyle);
-                                GUILayout.Box(selectedPackage.Package.Description, packageDetailsValueStyle);
+                                GUILayout.Box(selectedPackage.PackageQueryInfo.Description, packageDetailsValueStyle);
                                 GUILayout.Space(20);
                             });
 
@@ -565,7 +565,7 @@ namespace NuGetV3
                                 {
                                     GUILayout.Label("Author(s):", packageDetailsNameStyle);
                                     GUILayout.Space(5);
-                                    GUILayout.Label(selectedPackage.Package.Authors[0], packageDetailsValueStyle);
+                                    GUILayout.Label(selectedPackage.PackageQueryInfo.Authors[0], packageDetailsValueStyle);
                                 });
                                 GLayoutUtils.HorizontalControlGroup(() =>
                                 {
@@ -639,7 +639,7 @@ namespace NuGetV3
         {
             foreach (var tabList in PackageListTabMap)
             {
-                var oldIdx = tabList.Value.FindIndex(x => x.Package.Id.Equals(package.Package.Id));
+                var oldIdx = tabList.Value.FindIndex(x => x.PackageQueryInfo.Id.Equals(package.PackageQueryInfo.Id));
 
                 if (oldIdx == -1)
                     continue;

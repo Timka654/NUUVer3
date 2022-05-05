@@ -11,7 +11,7 @@ namespace NuGetV3.Data
 {
     public class RepositoryPackageViewModel
     {
-        public NugetQueryPackageModel Package { get; set; }
+        public NugetQueryPackageModel PackageQueryInfo { get; set; }
 
         public NugetRegistrationResponseModel Registration { get; set; }
 
@@ -22,8 +22,6 @@ namespace NuGetV3.Data
         public string SelectedVersion { get; set; }
 
         public DateTime? VersionsReceived { get; set; }
-
-        public InstalledPackageData Installed { get; set; }
 
         public virtual bool HasUpdates { get; set; }
     }

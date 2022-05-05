@@ -150,14 +150,14 @@ namespace NuGetV3
 
                             foreach (var newPackage in entry.Data)
                             {
-                                RepositoryPackageViewModel package = InstalledPackages.Find(x => x.Package.Id.Equals(newPackage.Id));
+                                RepositoryPackageViewModel package = InstalledPackages.Find(x => x.PackageQueryInfo.Id.Equals(newPackage.Id));
 
                                 if (package == null)
                                     package = new RepositoryPackageViewModel();
 
-                                package.Package = newPackage;
+                                package.PackageQueryInfo = newPackage;
 
-                                package.Package.Description = ShrinkDescription(package.Package.Description);
+                                package.PackageQueryInfo.Description = ShrinkDescription(package.PackageQueryInfo.Description);
 
                                 result.Add(package);
                             }
@@ -183,7 +183,7 @@ namespace NuGetV3
         }
 
         public async void PackageRegistrationRequestAsync(PackageInstallProcessData package, Action onFinished, CancellationToken cancellationToken)
-            => await PackageRegistrationRequest(package.Package, onFinished, cancellationToken);
+            => await PackageRegistrationRequest(package.RepositoryPackage, onFinished, cancellationToken);
 
         public async void PackageRegistrationRequestAsync(RepositoryPackageViewModel package, Action onFinished, CancellationToken cancellationToken)
             => await PackageRegistrationRequest(package, onFinished, cancellationToken);
@@ -214,7 +214,7 @@ namespace NuGetV3
                     {
                         client.Timeout = TimeSpan.FromSeconds(10);
 
-                        using (var response = await client.GetAsync(supporedSource.Url.TrimEnd('/') + $"/{package.Package.Id.ToLower()}/index.json"))
+                        using (var response = await client.GetAsync(supporedSource.Url.TrimEnd('/') + $"/{package.PackageQueryInfo.Id.ToLower()}/index.json"))
                         {
                             if (!response.IsSuccessStatusCode)
                                 continue;
@@ -258,7 +258,7 @@ namespace NuGetV3
                 return Task.CompletedTask;
             }
 
-            return PackageVersionsRequest(package.Package.Id, onSuccess, cancellationToken);
+            return PackageVersionsRequest(package.PackageQueryInfo.Id, onSuccess, cancellationToken);
         }
 
         public async Task PackageVersionsRequest(string name, Action<bool, List<string>> onSuccess, CancellationToken cancellationToken)

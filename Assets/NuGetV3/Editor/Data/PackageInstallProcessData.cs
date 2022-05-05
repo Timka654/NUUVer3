@@ -11,13 +11,15 @@ namespace NuGetV3.Data
 {
     class PackageInstallProcessData
     {
-        public RepositoryPackageViewModel Package { get; set; }
+        public RepositoryPackageViewModel RepositoryPackage { get; set; }
 
-        public string Version => Package.SelectedVersion;
+        public string SelectedVersion => RepositoryPackage.SelectedVersion;
 
-        public NugetRegistrationResponseModel Registration => Package.Registration;
+        public string PackageName => RepositoryPackage.PackageQueryInfo.Id;
 
-        public NugetRegistrationCatalogEntryModel VersionCatalog => Package.SelectedVersionCatalog;
+        public NugetRegistrationResponseModel Registration => RepositoryPackage.Registration;
+
+        public NugetRegistrationCatalogEntryModel VersionCatalog => RepositoryPackage.SelectedVersionCatalog;
 
         public List<PackageInstallProcessData> DependecyList { get; } = new List<PackageInstallProcessData>();
 
@@ -31,11 +33,11 @@ namespace NuGetV3.Data
         {
             return new PackageInstallProcessData()
             {
-                Package = new RepositoryPackageViewModel()
+                RepositoryPackage = new RepositoryPackageViewModel()
                 {
-                    Package = Package.Package,
-                    Registration = Package.Registration,
-                    Versions = new List<string>(Package.Versions)
+                    PackageQueryInfo = RepositoryPackage.PackageQueryInfo,
+                    Registration = RepositoryPackage.Registration,
+                    Versions = new List<string>(RepositoryPackage.Versions)
 
                 }
             };
