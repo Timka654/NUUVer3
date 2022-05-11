@@ -1,0 +1,6 @@
+[
+  {
+    "Name": "nuget.org",
+    "Value": "https://api.nuget.org/v3/index.json"
+  }
+]
