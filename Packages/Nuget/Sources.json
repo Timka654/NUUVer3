@@ -1,9 +1,5 @@
 [
   {
-    "Name": "tp_workload",
-    "Value": "http://nuget.twicepricegroup.com/api/Package/94708437-6e0c-4a85-a8d2-f808a3947fb0-bf74b521-e71c-4d8e-97fa-e7fc5998255f-f12b95b5-0618-41d4-a4f5-d898d8b2ebc8/v3/index.json"
-  },
-  {
     "Name": "nuget.org",
     "Value": "https://api.nuget.org/v3/index.json"
   }
