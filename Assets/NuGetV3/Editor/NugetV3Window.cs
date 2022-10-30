@@ -99,7 +99,6 @@ namespace NuGetV3
 
         public void Refresh()
         {
-
             refreshState = true;
 
             packageListBodyScroll = Vector2.zero;
@@ -329,7 +328,7 @@ namespace NuGetV3
 
                 leftSideWidth = bodyResizer.Process(100, position.width / 1.3f);
 
-                DrawRigthBody();
+                DrawRigthBody(selectedPackage);
 
                 GUILayout.EndHorizontal();
 
@@ -503,9 +502,9 @@ namespace NuGetV3
 
         private int newSelectedVersionIdx;
 
-        private void DrawRigthBody()
+        private void DrawRigthBody(RepositoryPackageViewModel package)
         {
-            if (selectedPackage != null)
+            if (package != null)
             {
                 GLayoutUtils.HorizontalControlGroup(() =>
                 {
@@ -519,22 +518,22 @@ namespace NuGetV3
 
                             GLayoutUtils.VerticalControlGroup(() =>
                                 {
-                                    GUILayout.Box(selectedPackage.PackageQueryInfo.Id, packageItemNameStyle);
+                                    GUILayout.Box(package.PackageQueryInfo.Id, packageItemNameStyle);
 
                                     GLayoutUtils.HorizontalControlGroup(() =>
                                     {
-                                        newSelectedVersionIdx = EditorGUILayout.Popup(selectedVersionIdx, selectedPackage.Versions.Select(x=>x.ToString()).ToArray(), GUILayout.MaxWidth(240));
+                                        newSelectedVersionIdx = EditorGUILayout.Popup(selectedVersionIdx, package.Versions.Select(x => x.ToString()).ToArray(), GUILayout.MaxWidth(240));
 
                                         if (newSelectedVersionIdx != selectedVersionIdx)
                                             OnSelectedPackageVersion(newSelectedVersionIdx, selectedVersionIdx);
 
-                                        if (selectedPackage is InstalledPackageData ipd
+                                        if (package is InstalledPackageData ipd
                                         && ipd.SelectedVersion != ipd.InstalledVersion
                                         && GUILayout.Button("Update", GUILayout.Width(90)))
-                                            OnUpdateButtonClick(selectedPackage);
+                                            OnUpdateButtonClick(package);
 
-                                        if (GUILayout.Button(LocalNuget.HasInstalledPackage(selectedPackage.PackageQueryInfo.Id) ? "Remove" : "Install", GUILayout.Width(90)))
-                                            OnInstallUninstallButtonClick(selectedPackage);
+                                        if (GUILayout.Button(LocalNuget.HasInstalledPackage(package.PackageQueryInfo.Id) ? "Remove" : "Install", GUILayout.Width(90)))
+                                            OnInstallUninstallButtonClick(package);
                                     });
                                 });
 
@@ -547,11 +546,11 @@ namespace NuGetV3
                             {
                                 GUILayout.Space(10);
                                 GUILayout.Label("Description", packageDetailsNameStyle);
-                                GUILayout.Box(selectedPackage.PackageQueryInfo.Description, packageDetailsValueStyle);
+                                GUILayout.Box(package.PackageQueryInfo.Description, packageDetailsValueStyle);
                                 GUILayout.Space(20);
                             });
 
-                            if (selectedPackage.SelectedVersionCatalog == null)
+                            if (package.SelectedVersionCatalog == null)
                             {
                                 GUILayout.Label("Invalid package!!");
                                 return;
@@ -562,19 +561,19 @@ namespace NuGetV3
                                 {
                                     GUILayout.Label("Version:", packageDetailsNameStyle);
                                     GUILayout.Space(5);
-                                    GUILayout.Label(selectedPackage.SelectedVersion.ToString(), packageDetailsValueStyle);
+                                    GUILayout.Label(package.SelectedVersion.ToString(), packageDetailsValueStyle);
                                 });
                                 GLayoutUtils.HorizontalControlGroup(() =>
                                 {
                                     GUILayout.Label("Author(s):", packageDetailsNameStyle);
                                     GUILayout.Space(5);
-                                    GUILayout.Label(selectedPackage.PackageQueryInfo.Authors[0], packageDetailsValueStyle);
+                                    GUILayout.Label(package.PackageQueryInfo.Authors[0], packageDetailsValueStyle);
                                 });
                                 GLayoutUtils.HorizontalControlGroup(() =>
                                 {
                                     GUILayout.Label("Date published:", packageDetailsNameStyle);
                                     GUILayout.Space(5);
-                                    GUILayout.Label(selectedPackage.SelectedVersionCatalog.Published.ToString(), packageDetailsValueStyle);
+                                    GUILayout.Label(package.SelectedVersionCatalog.Published.ToString(), packageDetailsValueStyle);
                                 });
 
                                 GUILayout.Space(20);
@@ -582,7 +581,7 @@ namespace NuGetV3
                                 GLayoutUtils.VerticalControlGroup(() =>
                                 {
                                     GUILayout.Label("Dependencies", packageDetailsNameStyle);
-                                    foreach (var group in selectedPackage.SelectedVersionCatalog.DependencyGroups)
+                                    foreach (var group in package.SelectedVersionCatalog.DependencyGroups)
                                     {
                                         GUILayout.Label($"- {group.TargetFramework}", packageDetailsValueStyle);
 
@@ -649,6 +648,23 @@ namespace NuGetV3
 
                 tabList.Value[oldIdx] = package;
             }
+        }
+
+        internal void RemovePackage(NugetV3TabEnum tab, string id)
+        {
+            if (PackageListTabMap.TryGetValue(tab, out var packageList))
+            {
+                if (SelectedPackageTabMap.TryGetValue(tab, out var selectedp) && selectedp != null && selectedp.PackageQueryInfo.Id.Equals(id))
+                    SelectedPackageTabMap[tab] = null;
+
+                packageList.RemoveAll(x => x.PackageQueryInfo.Id.Equals(id));
+            }
+        }
+
+        internal void AddPackage(NugetV3TabEnum tab, InstalledPackageData package)
+        {
+            if (PackageListTabMap.TryGetValue(tab, out var packageList))
+                packageList.Add(package);
         }
 
         #endregion

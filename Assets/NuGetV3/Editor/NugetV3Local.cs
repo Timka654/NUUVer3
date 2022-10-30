@@ -22,7 +22,6 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
-using System.Web.Configuration;
 using UnityEditor;
 using UnityEditor.Sprites;
 using UnityEngine;
@@ -96,8 +95,28 @@ namespace NuGetV3
                 return PackageVersionsRequest(package, (updated, versions) =>
                 {
                     if (!versions.Any())
+                    {
+                        if (package is InstalledPackageData ipd)
+                        {
+                            package.SetPackageVersions(Enumerable.Range(0, 1).Select(x => ipd.InstalledVersion).ToList());
+                            package.Registration = new NugetRegistrationResponseModel()
+                            {
+                                Items = new List<NugetRegistrationPageModel>()
+                                {
+                                    new NugetRegistrationPageModel() {
+                                        Items = new List<NugetRegistrationLeafModel>()
+                                        {
+                                            new NugetRegistrationLeafModel(){
+                                                CatalogEntry = ipd.InstalledVersionCatalog
+                                            }
+                                        }
+                                    }
+                                }
+                            };
+                        }
+                        window.SetPackageDetails(tab, package);
                         return;
-
+                    }
                     PackageRegistrationRequestAsync(package, () =>
                     {
                         if (package.Registration.Items.Any() == false)
@@ -350,59 +369,118 @@ namespace NuGetV3
         }
 
         private static Dictionary<ApiCompatibilityLevel, List<ApiCompatibilityLevelInfo>> SupportedApiVersion = new Dictionary<ApiCompatibilityLevel, List<ApiCompatibilityLevelInfo>>()
-    {
-#if UNITY_2021_3_OR_NEWER
-        { ApiCompatibilityLevel.NET_Standard, new List<ApiCompatibilityLevelInfo> {
-            new ApiCompatibilityLevelInfo(".NETStandard", "(,2.1]")
-        } },
-        { ApiCompatibilityLevel.NET_Unity_4_8, new List<ApiCompatibilityLevelInfo> {
-            new ApiCompatibilityLevelInfo(".NETStandard", "(,2.1]"),
-            new ApiCompatibilityLevelInfo(".NETFramework", "(,4.8]")
-        } },
+        {
+    #if UNITY_2021_3_OR_NEWER
+            { ApiCompatibilityLevel.NET_Standard, new List<ApiCompatibilityLevelInfo> {
+                new ApiCompatibilityLevelInfo(".NETStandard", "(,2.1]")
+            } },
+            { ApiCompatibilityLevel.NET_Unity_4_8, new List<ApiCompatibilityLevelInfo> {
+                new ApiCompatibilityLevelInfo(".NETStandard", "(,2.1]"),
+                new ApiCompatibilityLevelInfo(".NETFramework", "(,4.8]")
+            } },
 
-#else
-        { ApiCompatibilityLevel.NET_Standard_2_0, new List<ApiCompatibilityLevelInfo> {
-            new ApiCompatibilityLevelInfo(".NETStandard", "(,2.0]")
-        } },
-        { ApiCompatibilityLevel.NET_4_6, new List<ApiCompatibilityLevelInfo> {
-            new ApiCompatibilityLevelInfo(".NETStandard", "(,2.0]"),
-            new ApiCompatibilityLevelInfo(".NETFramework", "(,4.6]")
-        } }
+    #else
+            { ApiCompatibilityLevel.NET_Standard_2_0, new List<ApiCompatibilityLevelInfo> {
+                new ApiCompatibilityLevelInfo(".NETStandard", "(,2.0]")
+            } },
+            { ApiCompatibilityLevel.NET_4_6, new List<ApiCompatibilityLevelInfo> {
+                new ApiCompatibilityLevelInfo(".NETStandard", "(,2.0]"),
+                new ApiCompatibilityLevelInfo(".NETFramework", "(,4.6]")
+            } }
+    #endif
+        };
+
+        private static Dictionary<string, List<ApiCompatibilityLevelInfo>> frameworkCompatibility = new Dictionary<string, List<ApiCompatibilityLevelInfo>>()
+        {
+#if UNITY_2021_3_OR_NEWER
+            { ".NETStandard2.1", new List<ApiCompatibilityLevelInfo>()
+                {
+                    new ApiCompatibilityLevelInfo(".NETStandard", "(,2.1]")
+                }
+            },
 #endif
-    };
+            { ".NETStandard2.0", new List<ApiCompatibilityLevelInfo>()
+                {
+                    new ApiCompatibilityLevelInfo(".NETStandard", "(,2.0]"),
+                    new ApiCompatibilityLevelInfo(".NETFramework", "4.6.1")
+                }
+            },
+            { ".NETStandard1.6", new List<ApiCompatibilityLevelInfo>()
+                {
+                    new ApiCompatibilityLevelInfo(".NETStandard", "(,1.6]"),
+                    new ApiCompatibilityLevelInfo(".NETFramework", "4.6.1")
+                }
+            },
+            { ".NETStandard1.5", new List<ApiCompatibilityLevelInfo>()
+                {
+                    new ApiCompatibilityLevelInfo(".NETStandard", "(,1.5]"),
+                    new ApiCompatibilityLevelInfo(".NETFramework", "4.6.1")
+                }
+            },
+            { ".NETStandard1.4", new List<ApiCompatibilityLevelInfo>()
+                {
+                    new ApiCompatibilityLevelInfo(".NETStandard", "(,1.4]"),
+                    new ApiCompatibilityLevelInfo(".NETFramework", "4.6.1")
+                }
+            },
+            { ".NETStandard1.3", new List<ApiCompatibilityLevelInfo>()
+                {
+                    new ApiCompatibilityLevelInfo(".NETStandard", "(,1.3]"),
+                    new ApiCompatibilityLevelInfo(".NETFramework", "4.6")
+                }
+            },
+            { ".NETStandard1.2", new List<ApiCompatibilityLevelInfo>()
+                {
+                    new ApiCompatibilityLevelInfo(".NETStandard", "(,1.2]"),
+                    new ApiCompatibilityLevelInfo(".NETFramework", "4.5.1")
+                }
+            },
+            { ".NETStandard1.1", new List<ApiCompatibilityLevelInfo>()
+                {
+                    new ApiCompatibilityLevelInfo(".NETStandard", "(,1.1]"),
+                    new ApiCompatibilityLevelInfo(".NETFramework", "4.5")
+                }
+            },
+            { ".NETStandard1.0", new List<ApiCompatibilityLevelInfo>()
+                {
+                    new ApiCompatibilityLevelInfo(".NETStandard", "(,1.0]"),
+                    new ApiCompatibilityLevelInfo(".NETFramework", "4.5")
+                }
+            },
+        };
 
         private List<string> OrderFramework = new List<string>()
-    {
-#if UNITY_2021_3_OR_NEWER
-        ".NETStandard2.1",
-#endif
-        ".NETStandard2.0",
-        ".NETStandard1.6",
-        ".NETStandard1.5",
-        ".NETStandard1.4",
-        ".NETStandard1.3",
-        ".NETStandard1.2",
-        ".NETStandard1.1",
-        ".NETStandard1.0",
-#if UNITY_2021_3_OR_NEWER
-        ".NETFramework4.8",
-        ".NETFramework4.7.2",
-        ".NETFramework4.7.1",
-        ".NETFramework4.7",
-        ".NETFramework4.6.2",
-        ".NETFramework4.6.1",
-#endif
-        ".NETFramework4.6",
-        ".NETFramework4.5.2",
-        ".NETFramework4.5.1",
-        ".NETFramework4.5",
-        ".NETFramework4",
-        ".NETFramework3.5",
-        ".NETFramework3.0",
-        ".NETFramework2.0",
-        ".NETFramework1.1",
-        ".NETFramework1.0",
-    };
+        {
+    #if UNITY_2021_3_OR_NEWER
+            ".NETStandard2.1",
+    #endif
+            ".NETStandard2.0",
+            ".NETStandard1.6",
+            ".NETStandard1.5",
+            ".NETStandard1.4",
+            ".NETStandard1.3",
+            ".NETStandard1.2",
+            ".NETStandard1.1",
+            ".NETStandard1.0",
+    #if UNITY_2021_3_OR_NEWER
+            ".NETFramework4.8",
+            ".NETFramework4.7.2",
+            ".NETFramework4.7.1",
+            ".NETFramework4.7",
+            ".NETFramework4.6.2",
+            ".NETFramework4.6.1",
+    #endif
+            ".NETFramework4.6",
+            ".NETFramework4.5.2",
+            ".NETFramework4.5.1",
+            ".NETFramework4.5",
+            ".NETFramework4",
+            ".NETFramework3.5",
+            ".NETFramework3.0",
+            ".NETFramework2.0",
+            ".NETFramework1.1",
+            ".NETFramework1.0",
+        };
 
         private ApiCompatibilityLevel GetCompatibilityLevel()
             => PlayerSettings.GetApiCompatibilityLevel(EditorUserBuildSettings.selectedBuildTargetGroup);
@@ -535,6 +613,18 @@ namespace NuGetV3
 
             window.ReplacePackageData(process.InstalledPackage);
 
+            process.InstalledPackage.SetPackageVersions(process.RepositoryPackage.Versions);
+
+            window.RemovePackage(NugetV3TabEnum.Update, process.InstalledPackage.PackageQueryInfo.Id);
+
+            if (!process.RepositoryPackage.Versions.First().OriginalVersion.Equals(process.InstalledPackage.InstalledVersion.OriginalVersion))
+            {
+                window.AddPackage(NugetV3TabEnum.Update, process.InstalledPackage);
+            }
+
+            window.RemovePackage(NugetV3TabEnum.Installed, process.InstalledPackage.PackageQueryInfo.Id);
+            window.AddPackage(NugetV3TabEnum.Installed, process.InstalledPackage);
+
             return Task.FromResult(true);
         }
 
@@ -601,7 +691,7 @@ namespace NuGetV3
 
             if (package.SelectedFrameworkDeps == null)
             {
-                NUtils.LogDebug(settings, $"Cannot find target for {string.Join(",", allowTarget.Select(x => $"{x.Name}@{x.Range}"))} for {package.VersionCatalog.Id}@{package.SelectedVersion}");
+                NUtils.LogError(settings, $"Cannot find target for {string.Join(",", allowTarget.Select(x => $"{x.Name}@{x.Range}"))} for {package.VersionCatalog.Id}@{package.SelectedVersion}");
 
                 return false;
             }
@@ -758,23 +848,27 @@ namespace NuGetV3
                 dep.RepositoryPackage.SelectedVersionCatalog = depCatalog.CatalogEntry;
 
                 var ta = depCatalog.CatalogEntry.DependencyGroups
-                    .Where(x =>
-                    OrderFramework.Contains(x.TargetFramework) &&
-                    !mainPackage.IgnoringPackageList.Any(z =>
-                    z.VersionCatalog.Id == depCatalog.CatalogEntry.Id &&
-                    z.VersionCatalog.Version == depCatalog.CatalogEntry.Version &&
-                    (z.SelectedFramework == null || x.TargetFramework.Equals(z.SelectedFramework)))
-                    )
+                    .Where(x => OrderFramework.Contains(x.TargetFramework)); // check contains in unity supported frameworks
+
+                ta = ta.Where(x =>
+                !mainPackage.IgnoringPackageList.Any(i => i.VersionCatalog.Id == depCatalog.CatalogEntry.Id &&
+                i.VersionCatalog.Version == depCatalog.CatalogEntry.Version &&
+                (i.SelectedFramework == null || x.TargetFramework.Equals(i.SelectedFramework)))
+                ).ToArray();
+
+                if (frameworkCompatibility.TryGetValue(mainPackage.SelectedFramework, out var compability))
+                    ta = ta.Where(x => compability.Any(c => NuGetVersion.TryParse(x.TargetFramework.Replace(c.Name, string.Empty), out var cver) && c.Range.Satisfies(cver)));
+
+                ta = ta
                     .OrderByDescending(x => x.TargetFramework.Equals(mainPackage.SelectedFramework))
-                    .ThenBy(x => tfRange.IndexOf(x.TargetFramework))
-                    .ToArray();
+                    .ThenBy(x => tfRange.IndexOf(x.TargetFramework));
 
 
                 dep.SelectedFrameworkDeps = ta.FirstOrDefault();
 
                 if (dep.SelectedFrameworkDeps == null)
                 {
-                    NUtils.LogDebug(settings, $"Cannot find target framework {mainPackage.SelectedFramework} for {depCatalog.CatalogEntry.Id}@{depCatalog.CatalogEntry.Version}");
+                    NUtils.LogError(settings, $"Cannot find target framework {mainPackage.SelectedFramework} for {depCatalog.CatalogEntry.Id}@{depCatalog.CatalogEntry.Version}");
 
                     continue;
                 }
@@ -829,6 +923,8 @@ namespace NuGetV3
 
                 return Task.FromResult(CheckPackageDepsResultEnum.Compatible);
             }
+            else if (ipackage == null && mainPackage == package)
+                return Task.FromResult(CheckPackageDepsResultEnum.Compatible);
             else if (ipackage != null && ipackage.InstalledVersion == package.SelectedVersion)
                 return Task.FromResult(CheckPackageDepsResultEnum.AlreadyExists);
             else if (ipackage != null)
@@ -840,7 +936,7 @@ namespace NuGetV3
 
             ipackage = GetInstalledDepPackage(package.PackageName);
 
-            if (ipackage == null || ipackage.InstalledVersion == package.SelectedVersion)
+            if (ipackage != null && ipackage.InstalledVersion == package.SelectedVersion)
                 return Task.FromResult(CheckPackageDepsResultEnum.AlreadyExists);
 
             var needDeps = new List<InstalledPackageData>(InstalledPackages);
@@ -864,7 +960,7 @@ namespace NuGetV3
                 }
             }
 
-            if (!mainPackage.RemovePackageList.Contains(ipackage))
+            if (!mainPackage.RemovePackageList.Contains(ipackage) && ipackage != null)
                 mainPackage.RemovePackageList.Add(ipackage);
 
             return Task.FromResult(CheckPackageDepsResultEnum.Compatible);
@@ -949,6 +1045,9 @@ namespace NuGetV3
             RemoveUnityDir(installedPath);
 
             InstalledPackages.Remove(package);
+
+            window.RemovePackage(NugetV3TabEnum.Update, package.PackageQueryInfo.Id);
+            window.RemovePackage(NugetV3TabEnum.Installed, package.PackageQueryInfo.Id);
         }
 
         private void RemoveInstalledDepPackage(InstalledPackageData package)
@@ -1024,6 +1123,7 @@ namespace NuGetV3
             }
 
             window.UpdateTabTitle(NugetV3TabEnum.Installed, $"Installed - {InstalledPackages.Count}");
+
 
             //window.Refresh();
         }

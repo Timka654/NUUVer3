@@ -20,7 +20,7 @@ namespace NuGetV3.Data
 
         public string SelectedFramework => SelectedFrameworkDeps?.TargetFramework;
 
-        public override bool HasUpdates { get => base.HasUpdates; set => base.HasUpdates = value; }
+        public override bool HasUpdates { get => base.HasUpdates; protected set => base.HasUpdates = value; }
 
         public override void SetPackageVersions(IEnumerable<NuGetVersion> versions)
         {
@@ -30,8 +30,10 @@ namespace NuGetV3.Data
             {
                 SelectedVersionCatalog = InstalledVersionCatalog;
 
-                HasUpdates = InstalledVersion == Versions[0];
+                HasUpdates = InstalledVersion.OriginalVersion != Versions[0].OriginalVersion;
             }
+            else if (!Versions.Any())
+                HasUpdates = false;
         }
 
     }
