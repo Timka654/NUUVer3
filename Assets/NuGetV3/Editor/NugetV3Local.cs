@@ -1,5 +1,6 @@
 ﻿#if UNITY_EDITOR
 
+using Codice.Client.BaseCommands.BranchExplorer;
 using NU.Core;
 using NU.Core.Models.Response;
 using NuGet.Versioning;
@@ -504,6 +505,13 @@ namespace NuGetV3
         public InstalledPackageData GetInstalledDepPackage(string name)
             => InstalledDepPackages.FirstOrDefault(x => name.Equals(x.SelectedVersionCatalog.Id));
 
+        public InstalledPackageData GetInstalledHandmadePackage(string name)
+        {
+            var hi = handmadeInstalled.FirstOrDefault(x => name.Equals(x.Package));
+
+            return hi?.CreatePackage();
+        }
+
         public NugetHandmakeInstalled GetHandMadeInstalledPackage(string name)
             => handmadeInstalled.FirstOrDefault(x => name.Equals(x.Package, StringComparison.OrdinalIgnoreCase));
 
@@ -716,8 +724,10 @@ namespace NuGetV3
                 catch (InvalidPackageException ex)
                 {
                     if (package.IgnoringPackageList.Exists(x => x.VersionCatalog.Id == ex.InvalidPackageInfo.VersionCatalog.Id))
+                    {
+                        NUtils.LogError(settings, ex.ToString());
                         return false;
-
+                    }
                     package.IgnoringPackageList.Add(ex.InvalidPackageInfo);
 
                     NUtils.LogDebug(settings, ex.ToString());
@@ -774,7 +784,7 @@ namespace NuGetV3
                             }
                         },
 
-                        InstalledPackage = GetInstalledPackage(dep.Name) ?? GetInstalledDepPackage(dep.Name)
+                        InstalledPackage = GetInstalledPackage(dep.Name) ?? GetInstalledDepPackage(dep.Name) ?? GetInstalledHandmadePackage(dep.Name)
                     };
 
                     await PackageVersionsRequest(pkg.RepositoryPackage, (updated, versions) =>
@@ -832,6 +842,15 @@ namespace NuGetV3
 
             NUtils.LogDebug(settings, $"ProcessPackageDepedency {dep.PackageName}");
 
+            if (!dep.Registration.Items.Any())
+            {
+                if (dep.InstalledPackage == null)
+                    dep.InstalledPackage = GetInstalledHandmadePackage(dep.PackageName);
+
+                if (dep.InstalledPackage != null)
+                    dep.Registration.Items.AddRange(dep.InstalledPackage.Registration.Items);
+            }
+
             var validItems = dep.Registration.Items
                 .SelectMany(x => x.Items)
                 .Where(x => dep.RepositoryPackage.Versions.Contains(NuGetVersion.Parse(x.CatalogEntry.Version)))
@@ -850,16 +869,37 @@ namespace NuGetV3
                 var ta = depCatalog.CatalogEntry.DependencyGroups
                     .Where(x => OrderFramework.Contains(x.TargetFramework)); // check contains in unity supported frameworks
 
-                ta = ta.Where(x =>
+                var ta2 = ta = ta.Where(x =>
                 !mainPackage.IgnoringPackageList.Any(i => i.VersionCatalog.Id == depCatalog.CatalogEntry.Id &&
                 i.VersionCatalog.Version == depCatalog.CatalogEntry.Version &&
                 (i.SelectedFramework == null || x.TargetFramework.Equals(i.SelectedFramework)))
                 ).ToArray();
 
                 if (frameworkCompatibility.TryGetValue(mainPackage.SelectedFramework, out var compability))
-                    ta = ta.Where(x => compability.Any(c => NuGetVersion.TryParse(x.TargetFramework.Replace(c.Name, string.Empty), out var cver) && c.Range.Satisfies(cver)));
+                {
+                    ta = ta.Where(x => compability.Any(c =>
+                    {
+                        if (dep.PackageName.Equals("Unity.NSL.SocketCore.Extensions.Buffer"))
+                        {
+                            Debug.LogWarning($"DEBUG!!!!! - TF {x.TargetFramework}, TFR {x.TargetFramework.Replace(c.Name, string.Empty)}, C {c.Range}");
+                        }
 
-                ta = ta
+                        if (!NuGetVersion.TryParse(x.TargetFramework.Replace(c.Name, string.Empty), out var cver))
+                            return false;
+
+                        return c.Range.Satisfies(cver);
+                    }));
+
+                    if (!ta.Any())
+                    {
+
+                    }
+
+                }
+
+                var ta3 = ta;
+
+                var ta4 = ta = ta
                     .OrderByDescending(x => x.TargetFramework.Equals(mainPackage.SelectedFramework))
                     .ThenBy(x => tfRange.IndexOf(x.TargetFramework));
 
@@ -1097,10 +1137,10 @@ namespace NuGetV3
 
         private string GetNewPackageTempDir()
         {
-            var dir = @"D:\Temp\testPackage"; // change to temp
+            var dir = FileUtil.GetUniqueTempPathInProject();
 
-            //if(!Directory.Exists(dir))
-            //    Directory.CreateDirectory(dir);
+            if (!Directory.Exists(dir))
+                Directory.CreateDirectory(dir);
 
             RemoveUnityDir(dir);
 
