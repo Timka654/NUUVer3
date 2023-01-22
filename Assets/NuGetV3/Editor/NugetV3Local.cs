@@ -1,30 +1,20 @@
 ﻿#if UNITY_EDITOR
 
-using Codice.Client.BaseCommands.BranchExplorer;
 using NU.Core;
 using NU.Core.Models.Response;
 using NuGet.Versioning;
-using NuGetV3;
 using NuGetV3.Data;
 using NuGetV3.Utils.Exceptions;
-using PlasticPipe.PlasticProtocol.Server.Stubs;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
-using System.Net;
-using System.Net.Http;
-using System.ServiceModel.Channels;
-using System.Text;
-using System.Text.Encodings.Web;
 using System.Text.Json;
-using System.Text.Json.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
 using UnityEditor;
-using UnityEditor.Sprites;
 using UnityEngine;
 using NUtils = NuGetV3.NugetV3Utils;
 
@@ -174,42 +164,104 @@ namespace NuGetV3
             processor.Query(token, query, clear);
         }
 
+        public async void OnUpdateButtonClick(IEnumerable<RepositoryPackageViewModel> packages)
+        {
+            try
+            {
+                foreach (var package in packages)
+                {
+                    if (CheckPackageHandmadeCompatible(package.SelectedVersionCatalog).HasValue)
+                    {
+                        NugetV3Utils.LogError(settings, "Package contains in handmade list cannot be installed/removed/updated from Nuget package manager");
+
+                        window.CancelInstallProcessState();
+
+                        return;
+                    }
+                }
+
+                foreach (var package in packages)
+                {
+                    if (package.Registration == default)
+                        await PackageRegistrationRequest(package, () => { }, CancellationToken.None);
+                    package.SelectedVersionCatalog = package.Registration.Items.SelectMany(x => x.Items).OrderBy(x =>
+                    {
+
+                        var ver = NuGetVersion.Parse(x.CatalogEntry.Version);
+
+                        return ver;
+
+                    }).Last().CatalogEntry;
+
+                    var installed = GetInstalledPackage(package.PackageQueryInfo.Id);
+
+                    if (installed != null)
+                        await installPackage(package, false);
+                }
+
+                AssetDatabase.Refresh();
+
+            }
+            finally
+            {
+
+                window.CancelInstallProcessState();
+            }
+        }
+
+
         public async void OnUpdateButtonClick(RepositoryPackageViewModel package)
         {
-            if (CheckPackageHandmadeCompatible(package.SelectedVersionCatalog).HasValue)
+            try
             {
-                NugetV3Utils.LogError(settings, "Package contains in handmade list cannot be installed/removed/updated from Nuget package manager");
+                if (CheckPackageHandmadeCompatible(package.SelectedVersionCatalog).HasValue)
+                {
+                    NugetV3Utils.LogError(settings, "Package contains in handmade list cannot be installed/removed/updated from Nuget package manager");
 
-                window.CancelInstallProcessState();
+                    window.CancelInstallProcessState();
 
-                return;
+                    return;
+                }
+
+                var installed = GetInstalledPackage(package.PackageQueryInfo.Id);
+
+                if (installed != null)
+                    await installPackage(package);
+
             }
-
-            var installed = GetInstalledPackage(package.PackageQueryInfo.Id);
-
-            if (installed != null)
-                await InstallPackage(package);
-            else
+            finally
+            {
                 window.CancelInstallProcessState();
+            }
         }
+
 
         public async void OnInstallUninstallButtonClick(RepositoryPackageViewModel package)
         {
-            if (CheckPackageHandmadeCompatible(package.SelectedVersionCatalog).HasValue)
+            try
             {
-                NugetV3Utils.LogError(settings, "Package contains in handmade list cannot be installed/removed/updated from Nuget package manager");
+                if (CheckPackageHandmadeCompatible(package.SelectedVersionCatalog).HasValue)
+                {
+                    NugetV3Utils.LogError(settings, "Package contains in handmade list cannot be installed/removed/updated from Nuget package manager");
+
+                    window.CancelInstallProcessState();
+
+                    return;
+                }
+
+                var installed = GetInstalledPackage(package.PackageQueryInfo.Id);
+
+                if (installed == null)
+                    await installPackage(package);
+                else
+                    await RemovePackage(installed);
+
+            }
+            finally
+            {
 
                 window.CancelInstallProcessState();
-
-                return;
             }
-
-            var installed = GetInstalledPackage(package.PackageQueryInfo.Id);
-
-            if (installed == null)
-                await InstallPackage(package);
-            else
-                await RemovePackage(installed);
         }
 
         #endregion
@@ -222,7 +274,7 @@ namespace NuGetV3
 
         private List<NugetHandmakeInstalled> handmadeInstalled = new List<NugetHandmakeInstalled>();
 
-        private Dictionary<string, NugetIndexResponseModel> nuGetIndexMap = new Dictionary<string, NugetIndexResponseModel>();
+        private ConcurrentDictionary<string, NugetIndexResponseModel> nuGetIndexMap = new ConcurrentDictionary<string, NugetIndexResponseModel>();
 
         private void SerializeRepositoryes() => File.WriteAllText(Path.Combine(GetNugetDir(), "Sources.json"), JsonSerializer.Serialize(repositories, NUtils.JsonOptions));
 
@@ -524,7 +576,7 @@ namespace NuGetV3
 
         private ConcurrentBag<PackageInstallProcessData> PackageTemp { get; } = new ConcurrentBag<PackageInstallProcessData>();
 
-        private async Task InstallPackage(RepositoryPackageViewModel package)
+        private async Task installPackage(RepositoryPackageViewModel package, bool reload = true)
         {
             var process = new PackageInstallProcessData()
             {
@@ -538,13 +590,17 @@ namespace NuGetV3
                 if (TryMoveDepToInstallPackage(process, GetInstalledDepPackage(package.PackageQueryInfo.Id)))
                 {
 
+                    if (reload)
+                        AssetDatabase.Refresh();
+
                 }
                 else if (await BuildInstallPackageData(process) && await BuildTempDir(process) && await ProcessInstallPackage(process))
                 {
                     UpdateInstalledTab();
                     UpdateUpdateTab();
 
-                    AssetDatabase.Refresh();
+                    if (reload)
+                        AssetDatabase.Refresh();
                 }
                 else
                 {
@@ -561,8 +617,6 @@ namespace NuGetV3
                 NUtils.LogDebug(settings, ex.ToString());
             }
 
-            window.CancelInstallProcessState();
-
             Directory.Delete(process.BuildDir, true);
         }
 
@@ -573,8 +627,6 @@ namespace NuGetV3
                 if (dep.SelectedVersion == process.RepositoryPackage.SelectedVersion)
                 {
                     MoveDepToInstalledPackage(dep);
-
-                    AssetDatabase.Refresh();
 
                     return true;
                 }

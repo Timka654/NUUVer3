@@ -2,9 +2,9 @@
 
 using NuGetV3.Data;
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -27,7 +27,7 @@ namespace NuGetV3
     internal class NugetBrowseQueryProcessor : INugetQueryProcessor
     {
 
-        private Dictionary<string, RepositoryPackagesViewModel> nugetQueryMap = new Dictionary<string, RepositoryPackagesViewModel>();
+        private ConcurrentDictionary<string, RepositoryPackagesViewModel> nugetQueryMap = new ConcurrentDictionary<string, RepositoryPackagesViewModel>();
 
         public NugetBrowseQueryProcessor(NugetV3Window window, NugetV3Local local) : base(window, local)
         {

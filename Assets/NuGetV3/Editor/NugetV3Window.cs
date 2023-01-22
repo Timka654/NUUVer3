@@ -1,19 +1,12 @@
 #if UNITY_EDITOR
 
-using NU.Core.Models.Response;
 using NuGet.Versioning;
+using NuGetV3;
 using NuGetV3.Data;
 using NuGetV3.Utils;
 using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
-using System.Net;
-using System.Net.Http;
-using System.Text.Encodings.Web;
-using System.Text.Json;
-using System.Threading;
-using System.Threading.Tasks;
 using UnityEditor;
 using UnityEngine;
 
@@ -22,27 +15,6 @@ namespace NuGetV3
     [Serializable]
     public class NugetV3Window : EditorWindow
     {
-        private readonly Dictionary<NugetV3TabEnum, List<RepositoryPackageViewModel>> PackageListTabMap = new Dictionary<NugetV3TabEnum, List<RepositoryPackageViewModel>>()
-    {
-        { NugetV3TabEnum.Browse, new List<RepositoryPackageViewModel>() },
-        { NugetV3TabEnum.Installed, new List<RepositoryPackageViewModel>() },
-        { NugetV3TabEnum.Update, new List<RepositoryPackageViewModel>() },
-    };
-
-        private readonly Dictionary<NugetV3TabEnum, RepositoryPackageViewModel> SelectedPackageTabMap = new Dictionary<NugetV3TabEnum, RepositoryPackageViewModel>()
-    {
-        { NugetV3TabEnum.Browse, default },
-        { NugetV3TabEnum.Installed, default },
-        { NugetV3TabEnum.Update, default },
-    };
-
-        private readonly Dictionary<NugetV3TabEnum, SearchTabContent> SearchTextTabMap = new Dictionary<NugetV3TabEnum, SearchTabContent>()
-        {
-            { NugetV3TabEnum.Browse, new SearchTabContent ("","") },
-            { NugetV3TabEnum.Installed, new SearchTabContent ("","") },
-            { NugetV3TabEnum.Update, new SearchTabContent ("","") },
-        };
-
         #region MenuItems
 
         [MenuItem("NuGet/NuGet Package Manager", false, 0)]
@@ -53,9 +25,64 @@ namespace NuGetV3
 
         #endregion
 
+        #region Tabs
+
+        private readonly Dictionary<NugetV3TabEnum, TabContentData> tabContentMap = new Dictionary<NugetV3TabEnum, TabContentData>()
+        {
+            { NugetV3TabEnum.Browse, new TabContentData(NugetV3TabEnum.Browse, false, true) },
+            { NugetV3TabEnum.Installed, new TabContentData(NugetV3TabEnum.Installed, false, false) },
+            { NugetV3TabEnum.Update, new TabContentData(NugetV3TabEnum.Update, true, false)},
+        };
+
+        RepositoryPackageViewModel selectedPackage
+        {
+            get => CurrentTabContent.SelectedPackage;
+            set => CurrentTabContent.SelectedPackage = value;
+        }
+
+        List<RepositoryPackageViewModel> tabSelectedPackageList
+        {
+            get => CurrentTabContent.SelectedList;
+        }
+
+        List<RepositoryPackageViewModel> tabPackageList
+        {
+            get => CurrentTabContent.PackageList;
+        }
+
+        private string tabSearchText
+        {
+            get => CurrentTabContent.SearchText;
+            set => CurrentTabContent.SearchText = value;
+        }
+
+        private bool tabMultipleSelection
+        {
+            get => CurrentTabContent.MultipleSelection;
+        }
+
+        private bool tabRefreshState
+        {
+            get => CurrentTabContent.RefreshState;
+            set => CurrentTabContent.RefreshState = value;
+        }
+
+        private bool tabLoadMore
+        {
+            get => CurrentTabContent.LoadMore;
+        }
+
+        #endregion
+
         private void OnEnable()
         {
             LocalNuget = new NugetV3Local(this);
+
+            foreach (var item in tabContentMap.Values)
+            {
+                item.OnUpdate += (tab) => { if (CurrentTab == tab.Tab) Repaint(); };
+            }
+            CurrentTabContent = tabContentMap[CurrentTab];
 
             InitializeGUI();
 
@@ -67,46 +94,34 @@ namespace NuGetV3
             }
         }
 
-        RepositoryPackageViewModel selectedPackage
-        {
-            get => SelectedPackageTabMap[CurrentTab];
-        }
-
-        private string latestSearchContent
-        {
-            get => SearchTextTabMap[CurrentTab].Searched;
-            set { SearchTextTabMap[CurrentTab].Searched = value; }
-        }
-
         private NugetV3Local LocalNuget;
+
+        private string SearchInputText;
 
         private void OnSearchButtonClick()
         {
-            if (latestSearchContent == SearchInputText)
+            if (tabSearchText == SearchInputText)
                 return;
 
             packageListBodyScroll = Vector2.zero;
 
-            latestSearchContent = SearchInputText;
+            tabSearchText = SearchInputText;
 
             OnRefreshButtonClick();
         }
 
-        private void OnRefreshButtonClick()
-        {
-            Refresh();
-        }
+        private void OnRefreshButtonClick() { Refresh(); }
 
         public void Refresh()
         {
-            refreshState = true;
+            tabRefreshState = true;
 
             packageListBodyScroll = Vector2.zero;
 
-            SelectedPackageTabMap[CurrentTab] = null;
-            PackageListTabMap[CurrentTab].Clear();
+            selectedPackage = null;
+            tabPackageList.Clear();
 
-            LocalNuget.QueryAsync(CurrentTab, latestSearchContent, true);
+            LocalNuget.QueryAsync(CurrentTab, tabSearchText, true);
         }
 
         internal void UpdateEditableRepositories(List<NugetRepositorySource> nugetRepositorySources)
@@ -123,13 +138,13 @@ namespace NuGetV3
 
         private void OnChangeTab(NugetV3TabEnum newTab, NugetV3TabEnum oldTab)
         {
-            if (oldTab < NugetV3TabEnum.Settings)
-                SearchTextTabMap[oldTab].New = SearchInputText;
-
             ClearSearchInput();
 
             if (newTab < NugetV3TabEnum.Settings)
-                SearchInputText = SearchTextTabMap[newTab].New;
+            {
+                CurrentTabContent = tabContentMap[newTab];
+                SearchInputText = CurrentTabContent.SearchText;
+            }
         }
 
         private void OnSettingsSaveButtonClick()
@@ -156,7 +171,7 @@ namespace NuGetV3
 
         private void OnMoreButtonClick()
         {
-            LocalNuget.QueryAsync(CurrentTab, latestSearchContent);
+            LocalNuget.QueryAsync(CurrentTab, tabSearchText);
         }
 
         public void OnInstallUninstallButtonClick(RepositoryPackageViewModel package)
@@ -169,6 +184,16 @@ namespace NuGetV3
             LocalNuget.OnInstallUninstallButtonClick(package);
         }
 
+        public void OnUpdateButtonClick(IEnumerable<RepositoryPackageViewModel> packages)
+        {
+            if (processingStateInstall)
+                return;
+
+            processingStateInstall = true;
+
+            LocalNuget.OnUpdateButtonClick(packages);
+        }
+
         public void OnUpdateButtonClick(RepositoryPackageViewModel package)
         {
             if (processingStateInstall)
@@ -179,11 +204,29 @@ namespace NuGetV3
             LocalNuget.OnUpdateButtonClick(package);
         }
 
-        private bool processingStateInstall = false;
+
+        private bool __psi = false;
+        private bool processingStateInstall
+        {
+            get { return __psi; }
+            set
+            {
+                if (__psi == value)
+                    return;
+
+                __psi = value;
+
+
+                if (__psi)
+                    EditorUtility.DisplayProgressBar("Processing update", string.Empty, 0);
+                else
+                    EditorUtility.ClearProgressBar();
+            }
+        }
 
         public bool CancelInstallProcessState() => processingStateInstall = false;
 
-        public bool CancelRefreshProcessState() => refreshState = false;
+        public bool CancelRefreshProcessState() => tabRefreshState = false;
 
         #region GUI
 
@@ -258,10 +301,7 @@ namespace NuGetV3
         private Vector2 packageDescriptionScrollPos;
 
         private NugetV3TabEnum CurrentTab = NugetV3TabEnum.Browse;
-
-        private string SearchInputText;
-
-        private bool refreshState = false;
+        private TabContentData CurrentTabContent;
 
         private float leftSideWidth = 230;
 
@@ -285,8 +325,36 @@ namespace NuGetV3
             bodyResizer = new ResizeHorizontalView(this, leftSideWidth, HeaderHeight, position.height - HeaderHeight);
         }
 
+        private GUIStyle loadMoreBtnStyle;
+        private GUIStyle selectAllToggleStyle;
+        private GUIStyle selectPkgToggleStyle;
+
+        private void BuildStyles()
+        {
+            loadMoreBtnStyle = new GUIStyle(GUI.skin.button);
+            loadMoreBtnStyle.stretchWidth = false;
+            loadMoreBtnStyle.margin = new RectOffset(0, 0, 0, 0);
+            loadMoreBtnStyle.padding = new RectOffset(0, 0, 10, 10);
+            loadMoreBtnStyle.alignment = TextAnchor.MiddleCenter;
+
+            loadMoreBtnStyle.fixedWidth = leftSideWidth - 10;
+
+            selectAllToggleStyle = new GUIStyle(GUI.skin.toggle);
+
+            selectAllToggleStyle.margin.bottom = 15;
+            selectAllToggleStyle.margin.left = 5;
+
+            selectPkgToggleStyle = new GUIStyle(GUI.skin.toggle);
+
+            selectPkgToggleStyle.margin.top = 15;
+            selectPkgToggleStyle.margin.left = 6;
+            selectPkgToggleStyle.fixedWidth = 12;
+
+        }
+
         private void OnGUI()
         {
+            BuildStyles();
             DrawTabs();
         }
 
@@ -308,20 +376,7 @@ namespace NuGetV3
 
                 GUILayout.BeginHorizontal(GUILayout.Width(leftSideWidth));
 
-                switch (selectedTab)
-                {
-                    case NugetV3TabEnum.Browse:
-                        DrawBrowseTab();
-                        break;
-                    case NugetV3TabEnum.Installed:
-                        DrawInstalledTab();
-                        break;
-                    case NugetV3TabEnum.Update:
-                        DrawUpdateTab();
-                        break;
-                    default:
-                        break;
-                }
+                DrawPackageList();
 
                 GUILayout.EndHorizontal();
 
@@ -344,7 +399,7 @@ namespace NuGetV3
         {
             GUILayout.BeginHorizontal(GUILayout.Height(30));
 
-            if (GUILayout.Button("R", GUILayout.Width(20)) && !refreshState)
+            if (GUILayout.Button("R", GUILayout.Width(20)) && !tabRefreshState)
                 OnRefreshButtonClick();
 
             SearchInputText = GUILayout.TextField(SearchInputText);
@@ -354,12 +409,6 @@ namespace NuGetV3
 
             GUILayout.EndHorizontal();
         }
-
-        private void DrawBrowseTab() => DrawPackageList(NugetV3TabEnum.Browse);
-
-        private void DrawInstalledTab() => DrawPackageList(NugetV3TabEnum.Installed);
-
-        private void DrawUpdateTab() => DrawPackageList(NugetV3TabEnum.Update);
 
         private void DrawSettingsTab()
         {
@@ -408,30 +457,51 @@ namespace NuGetV3
             });
         }
 
-        private void DrawPackageList(NugetV3TabEnum type)
+        private void DrawPackageList()
         {
-            if (PackageListTabMap[type].Any())
+            if (tabPackageList.Any())
             {
-                packageListBodyScroll = GUILayout.BeginScrollView(packageListBodyScroll, false, true, GUIStyle.none, GUI.skin.verticalScrollbar);
+                packageListBodyScroll = GUILayout.BeginScrollView(packageListBodyScroll, false, true, GUIStyle.none, GUI.skin.verticalScrollbar, GUILayout.MinWidth(leftSideWidth));
 
-                foreach (var package in PackageListTabMap[type])
+                if (tabMultipleSelection)
+                {
+                    GLayoutUtils.HorizontalControlGroup(() =>
+                    {
+                        var selectAll = GUILayout.Toggle(CurrentTabContent.AllSelected, "Select all", selectAllToggleStyle);
+
+                        if (GUILayout.Button("Update selected"))
+                        {
+                            OnUpdateButtonClick(CurrentTabContent.SelectedList);
+                        }
+
+                        if (CurrentTabContent.AllSelected != selectAll)
+                        {
+                            if (selectAll)
+                                CurrentTabContent.SelectAll();
+                            else
+                                CurrentTabContent.ClearSelection();
+                        }
+                    });
+                }
+
+                foreach (var package in tabPackageList)
                 {
                     DrawPackageItem(package);
                 }
 
-                if (!refreshState && CurrentTab == NugetV3TabEnum.Browse)
+                if (!tabRefreshState && tabLoadMore)
                 {
                     //todo mb. hide button if all source fully loaded
-                    GLayoutUtils.HorizontalControlGroup(() =>
-                    {
-                        if (GUILayout.Button("Load more ..."))
-                            OnMoreButtonClick();
-                    });
+                    // GLayoutUtils.HorizontalControlGroup(() =>
+                    //{
+                    if (GUILayout.Button("Load more ...", loadMoreBtnStyle))
+                        OnMoreButtonClick();
+                    //});
                 }
 
                 GUILayout.EndScrollView();
             }
-            else if (refreshState)
+            else if (tabRefreshState)
             {
                 GUILayout.Box("Receive package list. Please wait ...");
                 return;
@@ -447,6 +517,14 @@ namespace NuGetV3
         {
             GLayoutUtils.HorizontalControlGroup(() =>
             {
+                if (CurrentTabContent.MultipleSelection)
+                {
+                    var selected = CurrentTabContent.PackageSelected(package);
+
+                    if (GUILayout.Toggle(selected, GUIContent.none, selectPkgToggleStyle) != selected)
+                        CurrentTabContent.TogglePackageSelection(package, !selected);
+                }
+
                 GUILayout.Box(nuDefaultIcon.texture, GUILayout.Width(38), GUILayout.Height(38));//icon
 
                 DrawPackageItem1stRow(package);
@@ -609,7 +687,7 @@ namespace NuGetV3
 
         internal void SetPackageDetails(NugetV3TabEnum tab, RepositoryPackageViewModel package)
         {
-            SelectedPackageTabMap[tab] = package;
+            tabContentMap[tab].SelectedPackage = package;
 
             if (CurrentTab != tab)
                 return;
@@ -619,17 +697,17 @@ namespace NuGetV3
 
         internal void SetBrowsePackageViewList(List<RepositoryPackageViewModel> newPackageList)
         {
-            PackageListTabMap[NugetV3TabEnum.Browse] = newPackageList;
+            tabContentMap[NugetV3TabEnum.Browse].PackageList = newPackageList;
         }
 
         internal void SetInstalledPackageViewList(List<RepositoryPackageViewModel> newPackageList)
         {
-            PackageListTabMap[NugetV3TabEnum.Installed] = newPackageList;
+            tabContentMap[NugetV3TabEnum.Installed].PackageList = newPackageList;
         }
 
         internal void SetUpdatesPackageViewList(List<RepositoryPackageViewModel> newPackageList)
         {
-            PackageListTabMap[NugetV3TabEnum.Update] = newPackageList;
+            tabContentMap[NugetV3TabEnum.Update].PackageList = newPackageList;
         }
 
         internal void UpdateTabTitle(NugetV3TabEnum tab, string title)
@@ -639,48 +717,36 @@ namespace NuGetV3
 
         internal void ReplacePackageData(RepositoryPackageViewModel package)
         {
-            foreach (var tabList in PackageListTabMap)
+            foreach (var tabList in tabContentMap.Values)
             {
-                var oldIdx = tabList.Value.FindIndex(x => x.PackageQueryInfo.Id.Equals(package.PackageQueryInfo.Id));
+                var oldIdx = tabList.PackageList.FindIndex(x => x.PackageQueryInfo.Id.Equals(package.PackageQueryInfo.Id));
 
                 if (oldIdx == -1)
                     continue;
 
-                tabList.Value[oldIdx] = package;
+                tabList.PackageList[oldIdx] = package;
             }
         }
 
         internal void RemovePackage(NugetV3TabEnum tab, string id)
         {
-            if (PackageListTabMap.TryGetValue(tab, out var packageList))
+            if (tabContentMap.TryGetValue(tab, out var tabContent))
             {
-                if (SelectedPackageTabMap.TryGetValue(tab, out var selectedp) && selectedp != null && selectedp.PackageQueryInfo.Id.Equals(id))
-                    SelectedPackageTabMap[tab] = null;
+                if (tabContent.SelectedPackage != null && tabContent.SelectedPackage.PackageQueryInfo.Id.Equals(id))
+                    tabContent.SelectedPackage = null;
 
-                packageList.RemoveAll(x => x.PackageQueryInfo.Id.Equals(id));
+                tabContent.PackageList.RemoveAll(x => x.PackageQueryInfo.Id.Equals(id));
             }
         }
 
         internal void AddPackage(NugetV3TabEnum tab, InstalledPackageData package)
         {
-            if (PackageListTabMap.TryGetValue(tab, out var packageList))
-                packageList.Add(package);
+            if (tabContentMap.TryGetValue(tab, out var tabContent))
+                tabContent.PackageList.Add(package);
         }
 
         #endregion
     }
-}
-
-public class SearchTabContent
-{
-    public SearchTabContent(string searched, string _new)
-    {
-        Searched = searched;
-        New = _new;
-    }
-
-    public string Searched { get; set; }
-    public string New { get; set; }
 }
 
 #endif
