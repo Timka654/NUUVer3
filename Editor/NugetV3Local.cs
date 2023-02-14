@@ -9,8 +9,10 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Net;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -353,10 +355,18 @@ namespace NuGetV3
             if (!sourceFileInfo.Exists)
             {
                 if (!repositories.Any())
-                    repositories = new List<NugetRepositorySource>()
                 {
-                    new NugetRepositorySource { Name = "nuget.org", Value = "https://api.nuget.org/v3/index.json" } // -- default source
-                };
+                    repositories = GetSystemNugetSources();
+
+                    if (!repositories.Any())
+                        repositories = new List<NugetRepositorySource>()
+                        {
+                            new NugetRepositorySource {
+                                Name = "nuget.org",
+                                Value = "https://api.nuget.org/v3/index.json"
+                            } // -- default source
+                        };
+                }
 
                 SerializeRepositoryes();
             }
@@ -385,6 +395,52 @@ namespace NuGetV3
 
             if (!Directory.Exists(DefaultPackagesNugetPath))
                 Directory.CreateDirectory(DefaultPackagesNugetPath);
+        }
+
+        private List<NugetRepositorySource> GetSystemNugetSources()
+        {
+            var psi = new ProcessStartInfo("cmd", "/c \"dotnet nuget list source --format Short\"");
+
+            psi.CreateNoWindow = true;
+
+            psi.UseShellExecute = false;
+
+            psi.RedirectStandardOutput = true;
+
+            var proc = Process.Start(psi);
+
+            var output = proc.StandardOutput.ReadToEnd();
+
+
+            var result = new List<NugetRepositorySource>();
+
+            if (!string.IsNullOrWhiteSpace(output))
+            {
+                var reader = new StringReader(output);
+
+                while (reader.Peek() > -1)
+                {
+                    var source = reader.ReadLine();
+
+                    if (string.IsNullOrWhiteSpace(source))
+                        continue;
+
+                    var splitedSource = source.Trim().Split(" ");
+
+                    if (!splitedSource.First().Equals("E"))
+                        continue;
+
+                    var finishedSrc = new NugetRepositorySource();
+
+                    finishedSrc.Value = string.Join(" ", splitedSource.Skip(1).ToArray());
+
+                    finishedSrc.Name = new Uri(finishedSrc.Value).Host;
+
+                    result.Add(finishedSrc);
+                }
+            }
+
+            return result;
         }
 
         internal void InitializeNuGet()
@@ -933,7 +989,7 @@ namespace NuGetV3
                     {
                         if (dep.PackageName.Equals("Unity.NSL.SocketCore.Extensions.Buffer"))
                         {
-                            Debug.LogWarning($"DEBUG!!!!! - TF {x.TargetFramework}, TFR {x.TargetFramework.Replace(c.Name, string.Empty)}, C {c.Range}");
+                            UnityEngine.Debug.LogWarning($"DEBUG!!!!! - TF {x.TargetFramework}, TFR {x.TargetFramework.Replace(c.Name, string.Empty)}, C {c.Range}");
                         }
 
                         if (!NuGetVersion.TryParse(x.TargetFramework.Replace(c.Name, string.Empty), out var cver))
